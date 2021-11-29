@@ -1,0 +1,66 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Fichiers sources">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Fichiers d%27en-tête">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Fichiers de ressources">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Fichiers sources\DumbANN">
+      <UniqueIdentifier>{99b288e5-20aa-4dd5-9eda-5aed21ed1eae}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Fichiers d%27en-tête\DumbANN">
+      <UniqueIdentifier>{a39c29e1-d820-46dc-b9b8-464c3e13bb17}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Main.cpp">
+      <Filter>Fichiers sources</Filter>
+    </ClCompile>
+    <ClCompile Include="DumbANN\NeuralNetwork.cpp">
+      <Filter>Fichiers sources\DumbANN</Filter>
+    </ClCompile>
+    <ClCompile Include="DumbANN\NeuronStorages.cpp">
+      <Filter>Fichiers sources\DumbANN</Filter>
+    </ClCompile>
+    <ClCompile Include="DumbANN\LayerBase.cpp">
+      <Filter>Fichiers sources\DumbANN</Filter>
+    </ClCompile>
+    <ClCompile Include="DumbANN\LayerDense.cpp">
+      <Filter>Fichiers sources\DumbANN</Filter>
+    </ClCompile>
+    <ClCompile Include="DumbANN\LayerConv2D.cpp">
+      <Filter>Fichiers sources\DumbANN</Filter>
+    </ClCompile>
+    <ClCompile Include="DumbANN\TaskManager.cpp">
+      <Filter>Fichiers sources\DumbANN</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="DumbANN\NeuronStorages.h">
+      <Filter>Fichiers d%27en-tête\DumbANN</Filter>
+    </ClInclude>
+    <ClInclude Include="DumbANN\NeuralNetwork.h">
+      <Filter>Fichiers d%27en-tête\DumbANN</Filter>
+    </ClInclude>
+    <ClInclude Include="DumbANN\LayerBase.h">
+      <Filter>Fichiers d%27en-tête\DumbANN</Filter>
+    </ClInclude>
+    <ClInclude Include="DumbANN\LayerDense.h">
+      <Filter>Fichiers d%27en-tête\DumbANN</Filter>
+    </ClInclude>
+    <ClInclude Include="DumbANN\LayerConv2D.h">
+      <Filter>Fichiers d%27en-tête\DumbANN</Filter>
+    </ClInclude>
+    <ClInclude Include="DumbANN\TaskManager.h">
+      <Filter>Fichiers d%27en-tête\DumbANN</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
