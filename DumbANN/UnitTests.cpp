@@ -276,7 +276,7 @@ float	TestXOR()
 	ann.AddLayer(&layers[0]);
 	ann.AddLayer(&layers[1]);
 
-	const size_t		trainingCount = 1000;
+	const size_t		trainingCount = 10000;
 	float				input[2];
 	std::vector<float>	expectedOutput;
 
@@ -291,7 +291,7 @@ float	TestXOR()
 		ann.FeedForward(input);
 		ann.BackPropagateError(input, expectedOutput);
 		ann.UpdateWeightAndBiases();
-		printf("training %u, error is %f\n", i, (float)abs(ann.GetOutput().Data()[0] - expectedOutput[0]));
+		printf("training %u, error is %f\n", (int)i, (float)abs(ann.GetOutput().Data()[0] - expectedOutput[0]));
 	}
 
 	const size_t		testCount = 100;

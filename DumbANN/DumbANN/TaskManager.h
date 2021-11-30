@@ -15,7 +15,7 @@ public:
 									size_t domainSize,
 									bool sync = true);
 	void		DestroyThreadsIFN();
-	void		CreateThreadsIFN(int count = -1);
+	void		CreateThreadsIFN(bool forceCreate, int count = -1);
 	void		WaitForCompletion(bool processTasks = false);
 	void		CallOnceJobFinished(std::function<void()> callback);
 

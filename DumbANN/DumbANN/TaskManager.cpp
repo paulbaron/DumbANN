@@ -22,7 +22,7 @@ void	CTaskManager::MultithreadRange(std::function<void(size_t, size_t)> function
 {
 	size_t		taskCount = std::min(domainSize / MIN_VALUES_COMPUTED_PER_TASK, m_Threads.size() * 2);
 
-	CreateThreadsIFN();
+	CreateThreadsIFN(false);
 	if (sync)
 		WaitForCompletion(true);
 	if (taskCount <= 1)
@@ -68,10 +68,9 @@ void	CTaskManager::MultithreadRange(std::function<void(size_t, size_t)> function
 	}
 }
 
-void	CTaskManager::CreateThreadsIFN(int count)
+void	CTaskManager::CreateThreadsIFN(bool forceCreate, int count)
 {
-	DestroyThreadsIFN();
-	if (count != 0)
+	if (m_Threads.empty() || forceCreate)
 	{
 		size_t	processorCount = (size_t)count;
 		if (count < 0)
@@ -79,6 +78,9 @@ void	CTaskManager::CreateThreadsIFN(int count)
 			processorCount = std::thread::hardware_concurrency();
 			processorCount = processorCount <= 1 ? 1 : processorCount - 1;
 		}
+		if (m_Threads.size() == processorCount)
+			return;
+		DestroyThreadsIFN();
 		m_Threads.resize(processorCount);
 		for (int i = 0; i < m_Threads.size(); ++i)
 		{
