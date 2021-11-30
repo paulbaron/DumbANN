@@ -78,7 +78,7 @@ void	CTaskManager::CreateThreadsIFN(int count)
 			processorCount = std::thread::hardware_concurrency();
 			processorCount = processorCount <= 1 ? 1 : processorCount - 1;
 		}
-		m_Threads.resize(processorCount <= 1 ? 2 : processorCount - 1);
+		m_Threads.resize(processorCount);
 		for (int i = 0; i < m_Threads.size(); ++i)
 		{
 			m_Threads[i] = new std::thread([this]()
