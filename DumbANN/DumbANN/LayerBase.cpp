@@ -7,8 +7,8 @@ CLayer::CLayer()
 :	m_InputSize(0)
 ,	m_Activation(EActivation::Sigmoid)
 ,	m_Optimization(EOptimization::SGD)
-,	m_Initializer(ERandInitializer::RandXavier)
-,	m_Regularizer(ERegularizer::L2)
+,	m_Initializer(ERandInitializer::RandXavierNormalized)
+,	m_Regularizer(ERegularizer::None)
 ,	m_RegularizerRatio(1e-5)
 ,	m_LearningRate(0.05f)
 ,	m_Inertia(0.0f)
@@ -100,20 +100,19 @@ void	CLayer::ActivationDerivative(float* dst, const float* src, size_t size) con
 	{
 	case EActivation::Relu:
 		for (int i = 0; i < size; ++i)
-			dst[i] = ReluDerivative(src[i]);
+			dst[i] *= ReluDerivative(src[i]);
 		break;
 	case EActivation::Sigmoid:
 		for (int i = 0; i < size; ++i)
-			dst[i] = SigmoidDerivative(src[i]);
+			dst[i] *= SigmoidDerivative(src[i]);
 		break;
 	case EActivation::Tanh:
 		for (int i = 0; i < size; ++i)
-			dst[i] = TanhDerivative(src[i]);
+			dst[i] *= TanhDerivative(src[i]);
 		break;
 	case EActivation::Linear:
+		// dst *= 1
 	default:
-		for (int i = 0; i < size; ++i)
-			dst[i] = 1.0f;
 		break;
 	}
 }
@@ -204,7 +203,7 @@ void	CLayer::SGDWeight(size_t rangeMin, size_t rangeMax, size_t trainingSteps)
 	const float		*weightsPtrStop = m_Weights.View().GetRow(rangeMax);
 
 	// Contiguous matrix:
-	assert(m_Weights.View().m_RowStride - m_Weights.View().m_Columns * 4 < 0x10);
+	assert(m_Weights.View().m_RowByteStride - m_Weights.View().m_Columns * 4 < 0x10);
 	// Aligned pointers:
 	assert(	((ptrdiff_t)deltasPtr & 0xF) == 0 &&
 			((ptrdiff_t)weightsPtr & 0xF) == 0 &&

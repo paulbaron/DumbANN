@@ -70,7 +70,8 @@ void	CTaskManager::MultithreadRange(std::function<void(size_t, size_t)> function
 
 void	CTaskManager::CreateThreadsIFN(int count)
 {
-	if (m_Threads.empty() && count != 0)
+	DestroyThreadsIFN();
+	if (count != 0)
 	{
 		size_t	processorCount = (size_t)count;
 		if (count < 0)
@@ -91,6 +92,7 @@ void	CTaskManager::CreateThreadsIFN(int count)
 
 void	CTaskManager::DestroyThreadsIFN()
 {
+	WaitForCompletion(true);
 	m_StopThreads = true;
 	m_QueueChanged.notify_all();
 	for (int i = 0; i < m_Threads.size(); ++i)

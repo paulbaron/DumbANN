@@ -152,6 +152,7 @@
     <ClCompile Include="DumbANN\NeuronStorages.cpp" />
     <ClCompile Include="DumbANN\TaskManager.cpp" />
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="UnitTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DumbANN\LayerBase.h" />
@@ -160,6 +161,7 @@
     <ClInclude Include="DumbANN\NeuralNetwork.h" />
     <ClInclude Include="DumbANN\NeuronStorages.h" />
     <ClInclude Include="DumbANN\TaskManager.h" />
+    <ClInclude Include="UnitTests.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

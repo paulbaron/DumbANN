@@ -8,9 +8,10 @@ struct	SNeuronMatrixView
 	~SNeuronMatrixView();
 
 	float		*GetRow(size_t idx) const;
+	size_t		RowStride() const { return m_RowByteStride / sizeof(float); }
 
 	float		*m_Data;
-	size_t		m_RowStride;
+	size_t		m_RowByteStride;
 	size_t		m_Rows;
 	size_t		m_Columns;
 };
@@ -22,9 +23,10 @@ struct	SConstNeuronMatrixView
 	~SConstNeuronMatrixView();
 
 	const float	*GetRow(size_t idx) const;
+	size_t		RowStride() const { return m_RowByteStride / sizeof(float); }
 
 	const float	*m_Data;
-	size_t		m_RowStride;
+	size_t		m_RowByteStride;
 	size_t		m_Rows;
 	size_t		m_Columns;
 };
@@ -53,7 +55,7 @@ public:
 	bool	AllocMatrix(size_t rows, size_t col);
 
 	float						*Data() const { return m_Mat.m_Data; }
-	size_t						StorageByteSize() const { return m_Mat.m_RowStride * m_Mat.m_Rows; }
+	size_t						StorageByteSize() const { return m_Mat.m_RowByteStride * m_Mat.m_Rows; }
 	const SNeuronMatrixView		&View() const { return m_Mat; }
 
 	static void		ComputeNetInput(float *dst, const float *src, const SConstNeuronMatrixView &mul, const float *add);

@@ -42,6 +42,9 @@
     <ClCompile Include="DumbANN\TaskManager.cpp">
       <Filter>Fichiers sources\DumbANN</Filter>
     </ClCompile>
+    <ClCompile Include="UnitTests.cpp">
+      <Filter>Fichiers sources</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DumbANN\NeuronStorages.h">
@@ -61,6 +64,9 @@
     </ClInclude>
     <ClInclude Include="DumbANN\TaskManager.h">
       <Filter>Fichiers d%27en-tête\DumbANN</Filter>
+    </ClInclude>
+    <ClInclude Include="UnitTests.h">
+      <Filter>Fichiers d%27en-tête</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -9,7 +9,7 @@ SNeuronMatrixView::SNeuronMatrixView(float *data, size_t rows, size_t col, size_
 :	m_Data(data)
 ,	m_Rows(rows)
 ,	m_Columns(col)
-,	m_RowStride(rowStride)
+,	m_RowByteStride(rowStride)
 {
 }
 
@@ -20,14 +20,14 @@ SNeuronMatrixView::~SNeuronMatrixView()
 
 float	*SNeuronMatrixView::GetRow(size_t idx) const
 {
-	return (float*)((char*)m_Data + idx * m_RowStride);
+	return (float*)((char*)m_Data + idx * m_RowByteStride);
 }
 
 SConstNeuronMatrixView::SConstNeuronMatrixView(const float *data, size_t rows, size_t col, size_t rowStride)
 :	 m_Data(data)
 ,	 m_Rows(rows)
 ,	 m_Columns(col)
-,	 m_RowStride(rowStride)
+,	 m_RowByteStride(rowStride)
 {
 }
 
@@ -35,7 +35,7 @@ SConstNeuronMatrixView::SConstNeuronMatrixView(const SNeuronMatrixView &oth)
 :	 m_Data(oth.m_Data)
 ,	 m_Rows(oth.m_Rows)
 ,	 m_Columns(oth.m_Columns)
-,	 m_RowStride(oth.m_RowStride)
+,	 m_RowByteStride(oth.m_RowByteStride)
 {
 }
 
@@ -46,7 +46,7 @@ SConstNeuronMatrixView::~SConstNeuronMatrixView()
 
 const float	*SConstNeuronMatrixView::GetRow(size_t idx) const
 {
-	return (const float*)((const char*)m_Data + idx * m_RowStride);
+	return (const float*)((const char*)m_Data + idx * m_RowByteStride);
 }
 
 CNeuronVector::CNeuronVector()
@@ -94,7 +94,7 @@ bool	CNeuronMatrix::AllocMatrix(size_t rows, size_t col)
 	m_Mat.m_Data = (float*)_aligned_malloc(alignedColSize * rows, alignment);
 	m_Mat.m_Rows = rows;
 	m_Mat.m_Columns = col;
-	m_Mat.m_RowStride = alignedColSize;
+	m_Mat.m_RowByteStride = alignedColSize;
 	return m_Mat.m_Data != nullptr;
 }
 
@@ -265,11 +265,10 @@ void	CNeuronMatrix::ComputeError(float *dstProd, const float *src, const SConstN
 			const float 	*mulData = mul.GetRow(y) + x;
 			dstValue += src[y] * *mulData;
 		}
-		// multiply by current value:
-		dstProd[x] *= dstValue;
+		dstProd[x] = dstValue;
 	}
 #else
-	const ptrdiff_t	mulStride = mul.m_RowStride / sizeof(float);
+	const size_t	mulStride = mul.RowStride();
 	float			*dstPtr = dstProd;
 	float			*dstPtrStop = dstProd + mul.m_Columns;
 	const float		*mulPtr = mul.m_Data;
@@ -309,9 +308,9 @@ void	CNeuronMatrix::ComputeError(float *dstProd, const float *src, const SConstN
 			srcPtr += 4;
 		}
 		srcPtrStop += 4;
-		const ptrdiff_t	floatsLeft = srcPtrStop - srcPtr;
 		if (srcPtr < srcPtrStop)
 		{
+			const ptrdiff_t	floatsLeft = srcPtrStop - srcPtr;
 			const __m128	src_xyzw = _mm_loadu_ps(srcPtr);
 			const __m128	src_xxxx = _mm_shuffle_ps(src_xyzw, src_xyzw, _MM_SHUFFLE(0, 0, 0, 0));
 			const __m128	src_yyyy = _mm_shuffle_ps(src_xyzw, src_xyzw, _MM_SHUFFLE(1, 1, 1, 1));
@@ -339,9 +338,7 @@ void	CNeuronMatrix::ComputeError(float *dstProd, const float *src, const SConstN
 			else
 				assert(false);
 		}
-		const __m128	dstValue = _mm_loadu_ps(dstPtr);
-		const __m128	finalValue = _mm_mul_ps(accum_xyzw, dstValue);
-		_mm_storeu_ps(dstPtr, finalValue);
+		_mm_storeu_ps(dstPtr, accum_xyzw);
 
 		dstPtr += 4;
 		mulPtr += 4;
@@ -360,7 +357,7 @@ void	CNeuronMatrix::ComputeError(float *dstProd, const float *src, const SConstN
 			currentMulPtr += mulStride;
 			srcPtr += 1;
 		}
-		*dstPtr *= accum;
+		*dstPtr = accum;
 		dstPtr += 1;
 		mulPtr += 1;
 	}

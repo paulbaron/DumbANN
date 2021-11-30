@@ -40,9 +40,8 @@ bool	CNeuralNetwork::FeedForward(const float *input)
 			{
 				layer->FeedForward(nextInput, minRange, maxRange);
 			};
-			// Feed forward is FAST, we can reduce the domain size:
-			const size_t	domainSize = (layer->GetOutputSize() * layer->GetInputSize()) / 8;
-			m_TaskManager.MultithreadRange(feedForward, layer->GetOutputSize(), domainSize);
+			// Feed forward is FAST, we can reduce the threading hint:
+			m_TaskManager.MultithreadRange(feedForward, layer->GetDomainSize(), layer->GetThreadingHint() / 8);
 		}
 	}
 	return true;
@@ -74,13 +73,7 @@ bool	CNeuralNetwork::BackPropagateError(const float *input, const std::vector<fl
 				else
 					layer->BackPropagateError(prevOutput, nextLayer, minRange, maxRange);
 			};
-			size_t	domainSize = layer->GetOutputSize();
-			if (nextLayer != nullptr)
-			{
-				const SConstNeuronMatrixView &weights = nextLayer->GetWeights().View();
-				domainSize = weights.m_Columns * weights.m_Rows;
-			}
-			m_TaskManager.MultithreadRange(backProp, layer->GetOutputSize(), domainSize * 4);
+			m_TaskManager.MultithreadRange(backProp, layer->GetDomainSize(), layer->GetThreadingHint());
 		}
 	}
 	++m_CurrentTrainingStep;
@@ -97,9 +90,7 @@ bool	CNeuralNetwork::UpdateWeightAndBiases()
 		{
 			layer->UpdateWeightsAndBias(m_CurrentTrainingStep, minRange, maxRange);
 		};
-		const SConstNeuronMatrixView	&weights = layer->GetWeights().View();
-		const size_t					domainSize = weights.m_Columns * weights.m_Rows;
-		m_TaskManager.MultithreadRange(updateWeightAndBias, layer->GetOutputSize(), domainSize, false);
+		m_TaskManager.MultithreadRange(updateWeightAndBias, layer->GetDomainSize(), layer->GetThreadingHint(), false);
 	}
 	m_TaskManager.CallOnceJobFinished(std::function<void()>([this](){ ResetTrainingSteps(); }));
 	return true;

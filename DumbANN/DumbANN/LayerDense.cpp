@@ -65,7 +65,7 @@ void	CLayerDense::FeedForward(const float *input, size_t rangeMin, size_t rangeM
 	float					*netInputPtr = m_NetInput.Data() + rangeMin;
 	const float				*biasesPtr = m_Bias.Data() + rangeMin;
 	const float				*weightsPtr = m_Weights.View().GetRow(rangeMin);
-	SConstNeuronMatrixView	weightMat(weightsPtr, outputRange, m_InputSize, m_Weights.View().m_RowStride);
+	SConstNeuronMatrixView	weightMat(weightsPtr, outputRange, m_InputSize, m_Weights.View().m_RowByteStride);
 
 	// MatrixMAdd computes net input:
 	CNeuronMatrix::ComputeNetInput(netInputPtr, input, weightMat, biasesPtr);
@@ -82,11 +82,11 @@ void	CLayerDense::BackPropagateError(const float *prevOutput, const std::vector<
 	const float		*errorPtr = error.data();
 
 	// Outter layer of the neural network:
-	// Activation derivative:
-	ActivationDerivative(slopePtr + rangeMin, netInputPtr + rangeMin, outputRange);
 	// Cost derivative:
 	for (size_t outIdx = rangeMin; outIdx < rangeMax; ++outIdx)
-		slopePtr[outIdx] *= -errorPtr[outIdx];
+		slopePtr[outIdx] = -errorPtr[outIdx];
+	// Activation derivative:
+	ActivationDerivative(slopePtr + rangeMin, netInputPtr + rangeMin, outputRange);
 	// We compute the delta for the weights and bias (for the bias its just the output slope):
 	float		*slopeAccumPtr = m_SlopesOutAccum.Data();
 	for (size_t outIdx = rangeMin; outIdx < rangeMax; ++outIdx)
@@ -105,14 +105,10 @@ void	CLayerDense::BackPropagateError(const float *prevOutput, const CLayer *next
 	const size_t			outputRange = rangeMax - rangeMin;
 	float					*slopePtr = m_SlopesOut.Data();
 	float					*netInputPtr = m_NetInput.Data();
-	const size_t			nextNeuronCount = nextLayer->GetWeights().View().m_Rows;
-	const float				*nextSlopePtr = nextLayer->GetSlopesOut().Data();
-	const float				*nextWeightPtr = nextLayer->GetWeights().View().m_Data + rangeMin;
-	SConstNeuronMatrixView	weightMat(nextWeightPtr, nextNeuronCount, outputRange, nextLayer->GetWeights().View().m_RowStride);
 
 	// Inner layer of the neural network:
+	nextLayer->GatherSlopes(slopePtr, rangeMin, rangeMax);
 	ActivationDerivative(slopePtr + rangeMin, netInputPtr + rangeMin, outputRange);
-	CNeuronMatrix::ComputeError(slopePtr + rangeMin, nextSlopePtr, weightMat);
 	// We compute the delta for the weights and bias (for the bias its just the output slope):
 	float	*slopeAccumPtr = m_SlopesOutAccum.Data();
 	for (size_t outIdx = rangeMin; outIdx < rangeMax; ++outIdx)
@@ -134,6 +130,24 @@ void	CLayerDense::UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, si
 
 	OptimizeWeight(rangeMin, rangeMax, trainingSteps);
 	OptimizeBias(biasesPtr, slopeAccumPtr, rangeMin, rangeMax, trainingSteps);
-	memset(m_SlopesWeightAccum.View().GetRow(rangeMin), 0, outputRange * m_SlopesWeightAccum.View().m_RowStride);
+	memset(m_SlopesWeightAccum.View().GetRow(rangeMin), 0, outputRange * m_SlopesWeightAccum.View().m_RowByteStride);
 	memset(m_SlopesOutAccum.Data() + rangeMin, 0, outputRange * sizeof(float));
+}
+
+void	CLayerDense::GatherSlopes(float *dst, size_t rangeMin, size_t rangeMax) const
+{
+	SConstNeuronMatrixView	weightMat(m_Weights.View());
+	weightMat.m_Data += rangeMin;
+	weightMat.m_Columns = rangeMax - rangeMin;
+	CNeuronMatrix::ComputeError(dst + rangeMin, m_SlopesOut.Data(), weightMat);
+}
+
+size_t	CLayerDense::GetThreadingHint() const
+{
+	return m_Weights.View().m_Columns * m_Weights.View().m_Rows;
+}
+
+size_t	CLayerDense::GetDomainSize() const
+{
+	return GetOutputSize();
 }
