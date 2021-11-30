@@ -124,9 +124,7 @@ float	CLayer::Sigmoid(float x) const
 
 float	CLayer::SigmoidDerivative(float x) const
 {
-	float	ex = exp(-x);
-	float	a = ex + 1;
-	return ex / (a * a);
+	return Sigmoid(x) * (1.0f - Sigmoid(x));
 }
 
 float	CLayer::Relu(float x) const

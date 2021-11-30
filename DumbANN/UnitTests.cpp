@@ -228,6 +228,14 @@ float	TestMNIST()
 {
 	srand(42);
 
+	printf("--------------------------------\n");
+	printf("MNIST Test\n");
+	printf("4 Layers:\n");
+	printf("\tCLayerDense 28x28->28x28\n");
+	printf("\tCLayerDense 28x28->128\n");
+	printf("\tCLayerDense 128->64\n");
+	printf("\tCLayerDense 64->10\n");
+
 	std::vector<float>		images;
 	std::vector<uint8_t>	labels;
 
@@ -259,12 +267,20 @@ float	TestMNIST()
 
 	LoadDataSet(images, labels, "t10k-images.idx3-ubyte", "t10k-labels.idx1-ubyte");
 
-	return TestNetwork(ann, images, labels);
+	float	error = TestNetwork(ann, images, labels);
+	printf("--------------------------------\n");
+	return error;
 }
 
 float	TestXOR()
 {
-	srand(123);
+	srand(753);
+
+	printf("--------------------------------\n");
+	printf("XOR Test\n");
+	printf("2 Layers:\n");
+	printf("\tCLayerDense 2->2\n");
+	printf("\tCLayerDense 2->1\n");
 
 	CLayerDense		layers[2];
 
@@ -276,28 +292,29 @@ float	TestXOR()
 	ann.AddLayer(&layers[0]);
 	ann.AddLayer(&layers[1]);
 
-	const size_t		trainingCount = 10000;
+	const size_t		trainingCount = 50000;
 	float				input[2];
 	std::vector<float>	expectedOutput;
 
 	expectedOutput.resize(1);
 	for (size_t i = 0; i < trainingCount; ++i)
 	{
-		int		rand0 = i & 1;
-		int		rand1 = (i & 2) >> 1;
+		int		rand0 = rand() % 2;
+		int		rand1 = rand() % 2;
 		input[0] = rand0 == 0 ? 0.0f : 1.0f;
 		input[1] = rand1 == 0 ? 0.0f : 1.0f;
 		expectedOutput[0] = (rand0 ^ rand1) == 0 ? 0.0f : 1.0f;
 		ann.FeedForward(input);
 		ann.BackPropagateError(input, expectedOutput);
 		ann.UpdateWeightAndBiases();
-		printf("training %u, error is %f\n", (int)i, (float)abs(ann.GetOutput().Data()[0] - expectedOutput[0]));
+		const float		curError = abs(ann.GetOutput().Data()[0] - expectedOutput[0]);
+		printf("training %u/%u error is %f\r", (int)i + 1, (int)trainingCount, curError);
 	}
 
 	const size_t		testCount = 100;
 	float				error = 0.0f;
 
-	for (size_t i = 0; i < trainingCount; ++i)
+	for (size_t i = 0; i < testCount; ++i)
 	{
 		int		rand0 = rand() % 2;
 		int		rand1 = rand() % 2;
@@ -307,6 +324,65 @@ float	TestXOR()
 		ann.FeedForward(input);
 		error += abs(ann.GetOutput().Data()[0] - expectedOutput[0]);
 	}
-	printf("XOR test error is %f", error);
-	return error;
+	const float		avgError = error / testCount;
+	printf("\nXOR test error is %f\n", avgError);
+	printf("--------------------------------\n");
+	return avgError;
+}
+
+float	TestCosine()
+{
+	srand(545);
+
+	printf("--------------------------------\n");
+	printf("Cosine Test\n");
+	printf("4 Layers:\n");
+	printf("\tCLayerDense 1->8\n");
+	printf("\tCLayerDense 8->32\n");
+	printf("\tCLayerDense 32->16\n");
+	printf("\tCLayerDense 16->1\n");
+
+	CLayerDense		layers[4];
+
+	layers[0].Setup(1, 16, EActivation::Sigmoid);
+	layers[1].Setup(16, 32, EActivation::Sigmoid);
+	layers[2].Setup(32, 16, EActivation::Sigmoid);
+	layers[3].Setup(16, 1, EActivation::Linear);
+
+	CNeuralNetwork	ann;
+
+	ann.AddLayer(&layers[0]);
+	ann.AddLayer(&layers[1]);
+	ann.AddLayer(&layers[2]);
+	ann.AddLayer(&layers[3]);
+
+	const size_t		trainingCount = 1000000;
+	std::vector<float>	expectedOutput;
+
+	expectedOutput.resize(1);
+	for (size_t i = 0; i < trainingCount; ++i)
+	{
+		float	randX = (float)rand() / (float)RAND_MAX * 3.1415 * 5;
+		expectedOutput[0] = cos(randX);
+		ann.FeedForward(&randX);
+		ann.BackPropagateError(&randX, expectedOutput);
+		ann.UpdateWeightAndBiases();
+		const float		curError = abs(ann.GetOutput().Data()[0] - expectedOutput[0]);
+		if ((i + 1) % 100 == 0)
+		printf("training %u/%u error is %f\r", (int)i + 1, (int)trainingCount, curError);
+	}
+
+	const size_t		testCount = 100;
+	float				testError = 0.0f;
+
+	for (size_t i = 0; i < testCount; ++i)
+	{
+		float	randX = (float)rand() / (float)RAND_MAX * 3.1415 * 5;
+		float	cosRandX = cos(randX);
+		ann.FeedForward(&randX);
+		testError += abs(ann.GetOutput().Data()[0] - cosRandX);
+	}
+	printf("\nCosine test error is %f\n", testError / (float)testCount);
+	printf("--------------------------------\n");
+	return 0.0f;
 }

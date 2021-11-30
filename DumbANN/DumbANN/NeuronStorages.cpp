@@ -101,7 +101,7 @@ bool	CNeuronMatrix::AllocMatrix(size_t rows, size_t col)
 template<bool _DstAligned, bool _SrcAligned, bool _AddAligned>
 void	_ComputeNetInput(float *dst, const float *src, const SConstNeuronMatrixView& mul, const float *add)
 {
-#if		0
+#if		1
 	// Reference non-SIMD code:
 	for (size_t y = 0; y < mul.m_Rows; ++y)
 	{
