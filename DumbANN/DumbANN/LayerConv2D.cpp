@@ -126,7 +126,7 @@ void	CLayerConv2D::BackPropagateError(const float *prevOutput, const CLayer* nex
 	float			*netInputPtr = m_NetInput.Data();
 
 	// Inner layer of the neural network:
-	nextLayer->GatherSlopes(m_SlopesOut.Data(), rangeMin, rangeMax);
+	nextLayer->GatherSlopes(m_SlopesOut.Data(), featureStide * rangeMin, featureStide * rangeMax);
 	ActivationDerivative(m_SlopesOut.Data() + featureStide * rangeMin, netInputPtr + featureStide * rangeMin, outputRange);
 	// We compute the delta for the weights and bias (for the bias its just the output slope):
 	// For each feature:
@@ -180,16 +180,18 @@ void	CLayerConv2D::UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, s
 
 void	CLayerConv2D::GatherSlopes(float *dst, size_t rangeMin, size_t rangeMax) const
 {
-	const size_t	dstRange = rangeMax - rangeMin;
 	const size_t	featureOutputSizeX = (m_InputSizeX + 1) - m_FeatureSizeX;
 	const size_t	featureOutputSizeY = (m_InputSizeY + 1) - m_FeatureSizeY;
 	const size_t	featureInputStride = m_InputSizeX * m_InputSizeY;
+	const size_t	minRangeFeature = rangeMin / featureInputStride;
+	const size_t	maxRangeFeature = rangeMax / featureInputStride;
+	const size_t	dstRange = rangeMax - rangeMin;
 	const size_t	featureWeightStride = m_FeatureSizeX * m_FeatureSizeY;
 
 	// Init to zero, will add all derivative for each output neuron:
-	memset(dst + rangeMin * featureInputStride, 0, dstRange * featureInputStride);
+	memset(dst + rangeMin, 0, dstRange * sizeof(float));
 	// For each input feature:
-	for (size_t inFeatureIdx = rangeMin; inFeatureIdx < rangeMax; ++inFeatureIdx)
+	for (size_t inFeatureIdx = minRangeFeature; inFeatureIdx < maxRangeFeature; ++inFeatureIdx)
 	{
 		// For each output feature:
 		for (size_t outFeatureIdx = 0; outFeatureIdx < m_FeatureCount; ++outFeatureIdx)
