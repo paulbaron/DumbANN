@@ -118,8 +118,8 @@ void	LoadDataSet(std::vector<float> &images,
 void	TrainNetwork(CNeuralNetwork &ann, const std::vector<float> &images, const std::vector<uint8_t> &labels)
 {
 	const int			inputSize = images.size() / labels.size();
-	const size_t		epochCount = 100;
-	const size_t		batchCount = 10;
+	const size_t		epochCount = 200;
+	const size_t		batchCount = 100;
 	const size_t		miniBatchCount = 5;
 	std::vector<float>	expectedOutput(10);
 
@@ -153,7 +153,7 @@ void	TrainNetwork(CNeuralNetwork &ann, const std::vector<float> &images, const s
 			}
 			ann.UpdateWeightAndBiases();
 		};
-		printf("Error for epoch %u/%u is:\t%f\n", (int)epoch, (int)epochCount, errorEpoch / (float)(batchCount * miniBatchCount));
+		printf("Error for epoch %u/%u is:\t%f\r", (int)epoch, (int)epochCount, errorEpoch / (float)(batchCount * miniBatchCount));
 		errorEpoch = 0.0f;
 	}
 	printf("End of training\n");
@@ -247,20 +247,68 @@ float	TestMNIST()
 	const size_t	inputSize = images.size() / labels.size();
 	const size_t	outputSize = 10;
 	CNeuralNetwork	ann;
-	CLayerDense		layers[4];
+	CLayerDense		layers[2];
+	CLayerConv2D	convLayers[4];
 
-	// Output layer is linear to better backpropagate error during training:
-	layers[0].Setup(inputSize, inputSize, EActivation::Relu, ERandInitializer::RandHe, EOptimization::SGD);
-	layers[1].Setup(inputSize, 128, EActivation::Relu, ERandInitializer::RandHe, EOptimization::SGD);
-	layers[2].Setup(128, 64, EActivation::Relu, ERandInitializer::RandHe, EOptimization::SGD);
-	layers[3].Setup(64, outputSize, EActivation::Relu, ERandInitializer::RandHe, EOptimization::SGD);
+	convLayers[0].Setup(1, 28, 28,
+						10, 5, 5,
+						2, 1);
+	convLayers[0].SetActivation(EActivation::Relu);
+	convLayers[0].SetInitialization(ERandInitializer::RandHe);
 
+	convLayers[1].Setup(convLayers[0].GetFeatureCount(),
+						convLayers[0].GetOutputSizeX(),
+						convLayers[0].GetOutputSizeY(),
+						12, 4, 4,
+						0, 1);
+	convLayers[1].SetActivation(EActivation::Relu);
+	convLayers[1].SetInitialization(ERandInitializer::RandHe);
+
+	layers[0].Setup(convLayers[1].GetFeatureCount() * convLayers[1].GetOutputSizeX() * convLayers[1].GetOutputSizeY(), 128);
+	layers[0].SetActivation(EActivation::Relu);
+	layers[0].SetInitialization(ERandInitializer::RandHe);
+
+	layers[1].Setup(128, 10);
+	layers[1].SetActivation(EActivation::Relu);
+	layers[1].SetInitialization(ERandInitializer::RandHe);
+
+	ann.AddLayer(&convLayers[0]);
+	ann.AddLayer(&convLayers[1]);
 	ann.AddLayer(&layers[0]);
 	ann.AddLayer(&layers[1]);
-	ann.AddLayer(&layers[2]);
-	ann.AddLayer(&layers[3]);
+
+	// Output layer is linear to better backpropagate error during training:
+//	layers[0].Setup(inputSize, inputSize, EActivation::Relu, ERandInitializer::RandHe, EOptimization::SGD);
+//	layers[1].Setup(inputSize, 128, EActivation::Relu, ERandInitializer::RandHe, EOptimization::SGD);
+//	layers[2].Setup(128, 64, EActivation::Relu, ERandInitializer::RandHe, EOptimization::SGD);
+//	layers[3].Setup(64, outputSize, EActivation::Relu, ERandInitializer::RandHe, EOptimization::SGD);
+
+//	ann.AddLayer(&layers[0]);
+//	ann.AddLayer(&layers[1]);
+//	ann.AddLayer(&layers[2]);
+//	ann.AddLayer(&layers[3]);
 
 	TrainNetwork(ann, images, labels);
+
+	printf("\n");
+	for (size_t featureIdx = 0; featureIdx < convLayers[0].GetFeatureCount(); ++featureIdx)
+	{
+		float	*feature = convLayers[0].GetWeights().View().GetRow(featureIdx);
+		for (size_t y = 0; y < convLayers[0].GetFeatureSizeY(); ++y)
+		{
+			for (size_t x = 0; x < convLayers[0].GetFeatureSizeX(); ++x)
+			{
+				if (x != 0)
+					printf(",");
+				printf("%f", feature[y * 16 + x]);
+			}
+			printf("\n");
+		}
+		printf("\n");
+		printf("\n");
+	}
+	printf("\n");
+
 
 	images.clear();
 	labels.clear();
@@ -292,7 +340,7 @@ float	TestXOR()
 	ann.AddLayer(&layers[0]);
 	ann.AddLayer(&layers[1]);
 
-	const size_t		trainingCount = 50000;
+	const size_t		trainingCount = 100000;
 	float				input[2];
 	std::vector<float>	expectedOutput;
 
@@ -344,10 +392,10 @@ float	TestCosine()
 
 	CLayerDense		layers[4];
 
-	layers[0].Setup(1, 16, EActivation::Sigmoid);
-	layers[1].Setup(16, 32, EActivation::Sigmoid);
-	layers[2].Setup(32, 16, EActivation::Sigmoid);
-	layers[3].Setup(16, 1, EActivation::Linear);
+	layers[0].Setup(1, 16);
+	layers[1].Setup(16, 32);
+	layers[2].Setup(32, 16);
+	layers[3].Setup(16, 1);
 
 	CNeuralNetwork	ann;
 

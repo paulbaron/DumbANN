@@ -10,15 +10,8 @@ CLayerDense::~CLayerDense()
 {
 }
 
-bool	CLayerDense::Setup(size_t inputSize, size_t outputSize,
-							EActivation activation,
-							ERandInitializer randInit,
-							EOptimization optimization)
+bool	CLayerDense::Setup(size_t inputSize, size_t outputSize)
 {
-	m_Activation = activation;
-	m_Initializer = randInit;
-	m_Optimization = optimization;
-
 	m_InputSize = inputSize;
 	m_Weights.AllocMatrix(outputSize, inputSize);
 	m_SlopesWeightAccum.AllocMatrix(outputSize, inputSize);

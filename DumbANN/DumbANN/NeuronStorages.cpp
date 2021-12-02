@@ -86,8 +86,8 @@ bool	CNeuronMatrix::AllocMatrix(size_t rows, size_t col)
 {
 	const size_t	alignment = 0x10;
 	size_t			colByteSize = col * sizeof(float);
-	size_t			offsetToAlign = colByteSize & (alignment - 1);
-	size_t			alignedColSize = offsetToAlign == 0 ? colByteSize : colByteSize + offsetToAlign;
+	size_t			offsetToAlign = alignment - (colByteSize % alignment);
+	size_t			alignedColSize = offsetToAlign == alignment ? colByteSize : colByteSize + offsetToAlign;
 
 	if (m_Mat.m_Data != nullptr)
 		_aligned_free(m_Mat.m_Data);
@@ -95,6 +95,7 @@ bool	CNeuronMatrix::AllocMatrix(size_t rows, size_t col)
 	m_Mat.m_Rows = rows;
 	m_Mat.m_Columns = col;
 	m_Mat.m_RowByteStride = alignedColSize;
+	assert((alignedColSize & 0xF) == 0);
 	return m_Mat.m_Data != nullptr;
 }
 
@@ -113,7 +114,7 @@ void	_ComputeNetInput(float *dst, const float *src, const SConstNeuronMatrixView
 		dst[y] = sum + add[y];
 	}
 	return;
-#endif
+#else
 	float		*dstPtr = dst;
 	const float	*addPtr = add;
 	const float	*dstPtrStop = dst + mul.m_Rows;
@@ -225,6 +226,7 @@ void	_ComputeNetInput(float *dst, const float *src, const SConstNeuronMatrixView
 		dstPtr += 1;
 		addPtr += 1;
 	}
+#endif
 }
 
 void	CNeuronMatrix::ComputeNetInput(float *dst, const float *src, const SConstNeuronMatrixView &mul, const float *add)

@@ -18,21 +18,21 @@ CTaskManager::~CTaskManager()
 	DestroyThreadsIFN();
 }
 
-void	CTaskManager::MultithreadRange(std::function<void(size_t, size_t)> function, size_t outSize, size_t domainSize, bool sync)
+void	CTaskManager::MultithreadRange(std::function<void(size_t, size_t)> function, size_t domainSize, size_t threadingHint, bool sync)
 {
-	size_t		taskCount = std::min(domainSize / MIN_VALUES_COMPUTED_PER_TASK, m_Threads.size() * 2);
-
 	CreateThreadsIFN(false);
+	size_t		taskCount = std::min(threadingHint / MIN_VALUES_COMPUTED_PER_TASK, m_Threads.size() * 2);
+
 	if (sync)
 		WaitForCompletion(true);
 	if (taskCount <= 1)
 	{
-		function(0, outSize); // Not worth multi-threading
+		function(0, domainSize); // Not worth multi-threading
 	}
 	else
 	{
-		if (taskCount > outSize)
-			taskCount = outSize;
+		if (taskCount > domainSize)
+			taskCount = domainSize;
 		std::function<void()>	functions[BATCH_TASK_COUNT] = { };
 		size_t					taskIdx = 0;
 		size_t					taskIdxInBatch = 0;
@@ -43,9 +43,9 @@ void	CTaskManager::MultithreadRange(std::function<void(size_t, size_t)> function
 
 			while (taskIdx < taskCount && taskIdxInBatch < BATCH_TASK_COUNT)
 			{
-				size_t	range = outSize / taskCount;
+				size_t	range = domainSize / taskCount;
 				size_t	minRange = taskIdx * range;
-				size_t	maxRange = ((taskIdx + 1) < taskCount) ? minRange + range : outSize;
+				size_t	maxRange = ((taskIdx + 1) < taskCount) ? minRange + range : domainSize;
 
 				functions[taskIdxInBatch] = std::function<void()>([minRange, maxRange, function]()
 				{

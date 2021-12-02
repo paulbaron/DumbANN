@@ -54,6 +54,12 @@ public:
 	virtual size_t	GetThreadingHint() const = 0;
 	virtual size_t	GetDomainSize() const = 0;
 
+	void			SetActivation(EActivation activation) { m_Activation = activation; }
+	void			SetInitialization(ERandInitializer initializer) { m_Initializer = initializer; }
+	void			SetOptimizaton(EOptimization optimizer) { m_Optimization = optimizer; }
+	void			SetRegularization(ERegularizer regularizer) { m_Regularizer = regularizer; }
+	void			SetLearningRate(float learningRate) { m_LearningRate = learningRate; }
+
 	void			Initializer();
 
 protected:

@@ -7,7 +7,7 @@ CLayer::CLayer()
 :	m_InputSize(0)
 ,	m_Activation(EActivation::Sigmoid)
 ,	m_Optimization(EOptimization::SGD)
-,	m_Initializer(ERandInitializer::RandXavierNormalized)
+,	m_Initializer(ERandInitializer::RandXavier)
 ,	m_Regularizer(ERegularizer::None)
 ,	m_RegularizerRatio(1e-5)
 ,	m_LearningRate(0.05f)
@@ -201,7 +201,7 @@ void	CLayer::SGDWeight(size_t rangeMin, size_t rangeMax, size_t trainingSteps)
 	const float		*weightsPtrStop = m_Weights.View().GetRow(rangeMax);
 
 	// Contiguous matrix:
-	assert(m_Weights.View().m_RowByteStride - m_Weights.View().m_Columns * 4 < 0x10);
+	assert(m_Weights.View().m_RowByteStride - (m_Weights.View().m_Columns * 4) < 0x10);
 	// Aligned pointers:
 	assert(	((ptrdiff_t)deltasPtr & 0xF) == 0 &&
 			((ptrdiff_t)weightsPtr & 0xF) == 0 &&

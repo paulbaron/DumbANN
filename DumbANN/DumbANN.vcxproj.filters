@@ -45,6 +45,9 @@
     <ClCompile Include="UnitTests.cpp">
       <Filter>Fichiers sources</Filter>
     </ClCompile>
+    <ClCompile Include="DumbANN\LayerMaxPooling.cpp">
+      <Filter>Fichiers sources\DumbANN</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DumbANN\NeuronStorages.h">
@@ -67,6 +70,9 @@
     </ClInclude>
     <ClInclude Include="UnitTests.h">
       <Filter>Fichiers d%27en-tête</Filter>
+    </ClInclude>
+    <ClInclude Include="DumbANN\LayerMaxPooling.h">
+      <Filter>Fichiers d%27en-tête\DumbANN</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

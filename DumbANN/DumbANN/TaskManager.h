@@ -11,8 +11,8 @@ public:
 	~CTaskManager();
 
 	void		MultithreadRange(	std::function<void(size_t,size_t)> function,
-									size_t outSize,
 									size_t domainSize,
+									size_t threadingHint,
 									bool sync = true);
 	void		DestroyThreadsIFN();
 	void		CreateThreadsIFN(bool forceCreate, int count = -1);
