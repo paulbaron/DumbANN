@@ -6,11 +6,11 @@
 CLayer::CLayer()
 :	m_InputSize(0)
 ,	m_Activation(EActivation::Sigmoid)
-,	m_Optimization(EOptimization::SGD)
+,	m_Optimization(EOptimization::Adagrad)
 ,	m_Initializer(ERandInitializer::RandXavier)
 ,	m_Regularizer(ERegularizer::None)
 ,	m_RegularizerRatio(1e-5)
-,	m_LearningRate(0.05f)
+,	m_LearningRate(1.0f)
 ,	m_Inertia(0.0f)
 {
 }

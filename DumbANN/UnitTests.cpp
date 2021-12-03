@@ -4,6 +4,7 @@
 #include "DumbANN/NeuralNetwork.h"
 #include "DumbANN/LayerDense.h"
 #include "DumbANN/LayerConv2D.h"
+#include "DumbANN/LayerMaxPooling.h"
 
 #include <stdlib.h>
 #include <time.h>
@@ -118,15 +119,16 @@ void	LoadDataSet(std::vector<float> &images,
 void	TrainNetwork(CNeuralNetwork &ann, const std::vector<float> &images, const std::vector<uint8_t> &labels)
 {
 	const int			inputSize = images.size() / labels.size();
-	const size_t		epochCount = 200;
-	const size_t		batchCount = 100;
+	const size_t		epochCount = 5;
 	const size_t		miniBatchCount = 5;
+	const size_t		batchCount = labels.size() / miniBatchCount;
 	std::vector<float>	expectedOutput(10);
+	const size_t		printFrequency = 100;
 
 	for (size_t epoch = 0; epoch < epochCount; ++epoch)
 	{
 		float	errorEpoch = 0.0f;
-		float	error = 0.0f;
+		float	errorBatch = 0.0f;
 
 		for (size_t batchIdx = 0; batchIdx < batchCount; ++batchIdx)
 		{
@@ -146,14 +148,19 @@ void	TrainNetwork(CNeuralNetwork &ann, const std::vector<float> &images, const s
 				float	currentError = 0.0f;
 				for (size_t j = 0; j < 10; ++j)
 					currentError += abs(expectedOutput[j] - ann.GetOutput().Data()[j]);
-				error += currentError;
 				errorEpoch += currentError;
+				errorBatch += currentError;
 				// Backpropagation:
 				ann.BackPropagateError(inputPtr, expectedOutput);
 			}
 			ann.UpdateWeightAndBiases();
+			if ((batchIdx + 1) % printFrequency == 0)
+			{
+				printf("Error for batch %u/%u is:\t%f\n", (int)batchIdx + 1, (int)batchCount, errorBatch / (float)(printFrequency * miniBatchCount));
+				errorBatch = 0.0f;
+			}
 		};
-		printf("Error for epoch %u/%u is:\t%f\r", (int)epoch, (int)epochCount, errorEpoch / (float)(batchCount * miniBatchCount));
+		printf("Error for epoch %u/%u is:\t%f\n", (int)epoch + 1, (int)epochCount, errorEpoch / (float)(batchCount * miniBatchCount));
 		errorEpoch = 0.0f;
 	}
 	printf("End of training\n");
@@ -244,38 +251,73 @@ float	TestMNIST()
 	if (images.empty() || labels.empty())
 		return -1.0f;
 
-	const size_t	inputSize = images.size() / labels.size();
-	const size_t	outputSize = 10;
-	CNeuralNetwork	ann;
-	CLayerDense		layers[2];
-	CLayerConv2D	convLayers[4];
+	const size_t		inputSize = images.size() / labels.size();
+	const size_t		outputSize = 10;
+	CNeuralNetwork		ann;
+	CLayerDense			layers[3];
+	CLayerMaxPooling2D	poolLayers[2];
+	CLayerConv2D		convLayers[3];
 
+	// LeNet test:
+	// Convolution 6x5x5 2 padding:
 	convLayers[0].Setup(1, 28, 28,
-						10, 5, 5,
+						6, 5, 5,
 						2, 1);
 	convLayers[0].SetActivation(EActivation::Relu);
 	convLayers[0].SetInitialization(ERandInitializer::RandHe);
 
-	convLayers[1].Setup(convLayers[0].GetFeatureCount(),
+	// Max pooling	6x2x2:
+	poolLayers[0].Setup(convLayers[0].GetFeatureCount(),
 						convLayers[0].GetOutputSizeX(),
 						convLayers[0].GetOutputSizeY(),
-						12, 4, 4,
+						2, 2,
+						0, 2);
+	// Convolution
+	convLayers[1].Setup(poolLayers[0].GetFeatureCount(),
+						poolLayers[0].GetOutputSizeX(),
+						poolLayers[0].GetOutputSizeY(),
+						16, 5, 5,
 						0, 1);
 	convLayers[1].SetActivation(EActivation::Relu);
 	convLayers[1].SetInitialization(ERandInitializer::RandHe);
 
-	layers[0].Setup(convLayers[1].GetFeatureCount() * convLayers[1].GetOutputSizeX() * convLayers[1].GetOutputSizeY(), 128);
-	layers[0].SetActivation(EActivation::Relu);
-	layers[0].SetInitialization(ERandInitializer::RandHe);
+	// Max pooling	16x2x2:
+	poolLayers[1].Setup(convLayers[1].GetFeatureCount(),
+						convLayers[1].GetOutputSizeX(),
+						convLayers[1].GetOutputSizeY(),
+						2, 2,
+						0, 2);
 
-	layers[1].Setup(128, 10);
-	layers[1].SetActivation(EActivation::Relu);
-	layers[1].SetInitialization(ERandInitializer::RandHe);
+	// Flatten:
+	convLayers[2].Setup(poolLayers[1].GetFeatureCount(),
+						poolLayers[1].GetOutputSizeX(),
+						poolLayers[1].GetOutputSizeY(),
+						1, 1, 1,
+						0, 1);
+	convLayers[2].SetActivation(EActivation::Linear);
+	convLayers[2].SetInitialization(ERandInitializer::RandXavier);
+
+	// Dense:
+	layers[0].Setup(convLayers[2].GetFeatureCount() * convLayers[2].GetOutputSizeX() * convLayers[2].GetOutputSizeY(), 120);
+	layers[0].SetActivation(EActivation::Sigmoid);
+	layers[0].SetInitialization(ERandInitializer::RandXavierNormalized);
+
+	layers[1].Setup(layers[0].GetOutputSize(), 84);
+	layers[1].SetActivation(EActivation::Sigmoid);
+	layers[1].SetInitialization(ERandInitializer::RandXavierNormalized);
+
+	layers[2].Setup(layers[1].GetOutputSize(), 10);
+	layers[2].SetActivation(EActivation::Sigmoid);
+	layers[2].SetInitialization(ERandInitializer::RandXavierNormalized);
 
 	ann.AddLayer(&convLayers[0]);
+	ann.AddLayer(&poolLayers[0]);
 	ann.AddLayer(&convLayers[1]);
+	ann.AddLayer(&poolLayers[1]);
+	ann.AddLayer(&convLayers[2]);
 	ann.AddLayer(&layers[0]);
 	ann.AddLayer(&layers[1]);
+	ann.AddLayer(&layers[2]);
 
 	// Output layer is linear to better backpropagate error during training:
 //	layers[0].Setup(inputSize, inputSize, EActivation::Relu, ERandInitializer::RandHe, EOptimization::SGD);
@@ -290,7 +332,7 @@ float	TestMNIST()
 
 	TrainNetwork(ann, images, labels);
 
-	printf("\n");
+	printf("Conv Weights:\n");
 	for (size_t featureIdx = 0; featureIdx < convLayers[0].GetFeatureCount(); ++featureIdx)
 	{
 		float	*feature = convLayers[0].GetWeights().View().GetRow(featureIdx);
@@ -300,7 +342,26 @@ float	TestMNIST()
 			{
 				if (x != 0)
 					printf(",");
-				printf("%f", feature[y * 16 + x]);
+				printf("%f", feature[y * convLayers[0].GetFeatureSizeX() + x]);
+			}
+			printf("\n");
+		}
+		printf("\n");
+		printf("\n");
+	}
+	printf("\n");
+	printf("Conv Out:\n");
+	for (size_t featureIdx = 0; featureIdx < convLayers[0].GetFeatureCount(); ++featureIdx)
+	{
+		size_t	outStride = convLayers[0].GetOutputSizeX() * convLayers[0].GetOutputSizeY();
+		float	*feature = convLayers[0].GetOutput().Data() + featureIdx * outStride;
+		for (size_t y = 0; y < convLayers[0].GetOutputSizeY(); ++y)
+		{
+			for (size_t x = 0; x < convLayers[0].GetOutputSizeX(); ++x)
+			{
+				if (x != 0)
+					printf(",");
+				printf("%f", feature[y * convLayers[0].GetOutputSizeX() + x]);
 			}
 			printf("\n");
 		}
@@ -309,7 +370,25 @@ float	TestMNIST()
 	}
 	printf("\n");
 
-
+	printf("Pool Out:\n");
+	for (size_t featureIdx = 0; featureIdx < poolLayers[0].GetFeatureCount(); ++featureIdx)
+	{
+		size_t	outStride = poolLayers[0].GetOutputSizeX() * poolLayers[0].GetOutputSizeY();
+		float	*feature = poolLayers[0].GetOutput().Data() + featureIdx * outStride;
+		for (size_t y = 0; y < poolLayers[0].GetOutputSizeY(); ++y)
+		{
+			for (size_t x = 0; x < poolLayers[0].GetOutputSizeX(); ++x)
+			{
+				if (x != 0)
+					printf(",");
+				printf("%f", feature[y * poolLayers[0].GetOutputSizeX() + x]);
+			}
+			printf("\n");
+		}
+		printf("\n");
+		printf("\n");
+	}
+	printf("\n");
 	images.clear();
 	labels.clear();
 

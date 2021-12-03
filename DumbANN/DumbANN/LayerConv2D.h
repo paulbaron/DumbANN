@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LayerBase.h"
+#include "NeuronKernel.h"
 
 class	CLayerConv2D : public CLayer
 {
@@ -16,40 +17,67 @@ public:
 	virtual void	BackPropagateError(const float *prevOutput, const std::vector<float> &error, size_t rangeMin, size_t rangeMax) override;
 	virtual void	BackPropagateError(const float* prevOutput, const CLayer *nextLayer, size_t rangeMin, size_t rangeMax) override;
 	virtual void	UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, size_t rangeMax) override;
-	virtual void	GatherSlopes(float *dst, size_t rangeMin, size_t rangeMax) const override;
+	virtual void	GatherSlopes(float *dst, const float *prevOutput, size_t rangeMin, size_t rangeMax) const override;
 
 	virtual size_t	GetThreadingHint() const override;
 	virtual size_t	GetDomainSize() const override;
 
-	size_t			GetFeatureCount() const { return m_ConvParams.m_KernelCount; }
+	size_t			GetFeatureCount() const { return m_KernelCount; }
 	size_t			GetFeatureSizeX() const { return m_ConvParams.m_KernelSizeX; }
 	size_t			GetFeatureSizeY() const { return m_ConvParams.m_KernelSizeY; }
-	size_t			GetOutputSizeX() const { return m_ConvParams.GetConvOutputSizeX(); }
-	size_t			GetOutputSizeY() const { return m_ConvParams.GetConvOutputSizeY(); }
+	size_t			GetOutputSizeX() const { return m_ConvParams.m_OutputSizeX; }
+	size_t			GetOutputSizeY() const { return m_ConvParams.m_OutputSizeY; }
 
 private:
-	void			Kernel_AccumWeightsAndBiasDerivative(	const float *input,
-															const SConvolutionParams &conv,
-															size_t featureIdx,
-															int startInX, int stopInX,
-															int startInY, int stopInY,
-															int convX, int convY,
-															int paddedConvX, int paddedConvY);
-	void			Kernel_ComputeNetInput(	const float *input,
-											const SConvolutionParams &conv,
-											size_t featureIdx,
-											int startInX, int stopInX,
-											int startInY, int stopInY,
-											int convX, int convY,
-											int paddedConvX, int paddedConvY);
+	struct	SComputeNetInput_KernelIn
+	{
+		// Input data:
+		const float				*m_Input;
+		// Neuron data:
+		SConstNeuronMatrixView	m_Weights;
+		const float				*m_Bias;
+		float					*m_NetInput;
 
-	void			Kernel_GatherSlopes(	float *output,
-											const SConvolutionParams &conv,
-											size_t inFeatureIdx, size_t outFeatureIdx,
-											int startInX, int stopInX,
-											int startInY, int stopInY,
-											int convX, int convY,
-											int paddedConvX, int paddedConvY) const;
+		size_t					m_InFeatureCount;
+		size_t					m_OutFeatureCount;
+	};
+
+	struct	SAccumWeightsAndBiasDerivative_KernelIn
+	{
+		// Input data:
+		const float				*m_Input;
+		// Neuron data:
+		const float				*m_Slopes;
+		SNeuronMatrixView		m_AccumWeights;
+		float					*m_AccumBias;
+
+		size_t					m_InFeatureCount;
+		size_t					m_OutFeatureCount;
+	};
+
+	struct	SGatherSlopes_KernelIn
+	{
+		// Output data:
+		float					*m_Output;
+		// Neuron data:
+		const float				*m_Slopes;
+		SNeuronMatrixView		m_Weights;
+
+		size_t					m_InFeatureCount;
+		size_t					m_OutFeatureCount;
+	};
+
+	static void		Kernel_AccumWeightsAndBiasDerivative(	const SAccumWeightsAndBiasDerivative_KernelIn &input,
+															const SKernelRange &range,
+															const SConvolutionParams &conv);
+	static void		Kernel_ComputeNetInput(	const SComputeNetInput_KernelIn &input,
+											const SKernelRange &range,
+											const SConvolutionParams &conv);
+	static void		Kernel_GatherSlopes(const SGatherSlopes_KernelIn &input,
+										const SKernelRange &range,
+										const SConvolutionParams &conv);
 
 	SConvolutionParams	m_ConvParams;
+	size_t				m_KernelCount;
+	size_t				m_InputImageCount;
 };

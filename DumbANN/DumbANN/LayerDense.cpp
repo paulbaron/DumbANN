@@ -100,7 +100,7 @@ void	CLayerDense::BackPropagateError(const float *prevOutput, const CLayer *next
 	float					*netInputPtr = m_NetInput.Data();
 
 	// Inner layer of the neural network:
-	nextLayer->GatherSlopes(slopePtr, rangeMin, rangeMax);
+	nextLayer->GatherSlopes(slopePtr, m_Output.Data(), rangeMin, rangeMax);
 	ActivationDerivative(slopePtr + rangeMin, netInputPtr + rangeMin, outputRange);
 	// We compute the delta for the weights and bias (for the bias its just the output slope):
 	float	*slopeAccumPtr = m_SlopesOutAccum.Data();
@@ -127,8 +127,9 @@ void	CLayerDense::UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, si
 	memset(m_SlopesOutAccum.Data() + rangeMin, 0, outputRange * sizeof(float));
 }
 
-void	CLayerDense::GatherSlopes(float *dst, size_t rangeMin, size_t rangeMax) const
+void	CLayerDense::GatherSlopes(float *dst, const float *prevOutput, size_t rangeMin, size_t rangeMax) const
 {
+	(void)prevOutput;
 	SConstNeuronMatrixView	weightMat(m_Weights.View());
 	weightMat.m_Data += rangeMin;
 	weightMat.m_Columns = rangeMax - rangeMin;

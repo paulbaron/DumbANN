@@ -1,5 +1,6 @@
 
 #include "LayerConv2D.h"
+#include "NeuronKernel.h"
 #include <assert.h>
 
 CLayerConv2D::CLayerConv2D()
@@ -24,15 +25,17 @@ bool	CLayerConv2D::Setup(size_t inputFeatureCount, size_t inputSizeX, size_t inp
 		return false;
 	}
 
-	m_ConvParams.m_KernelCount = featureCount;
+	m_KernelCount = featureCount;
+	m_InputImageCount = inputFeatureCount;
+
 	m_ConvParams.m_KernelSizeX = featureSizeX;
 	m_ConvParams.m_KernelSizeY = featureSizeY;
 	m_ConvParams.m_KernelStride = stride;
 	m_ConvParams.m_InputPadding = padding;
-	m_ConvParams.m_InputImageCount = inputFeatureCount;
 	m_ConvParams.m_InputSizeX = inputSizeX;
 	m_ConvParams.m_InputSizeY = inputSizeY;
-	
+	m_ConvParams.ComputeConvOutputSize();
+
 	const size_t	featureOutputSizeX = GetOutputSizeX();
 	const size_t	featureOutputSizeY = GetOutputSizeY();
 	assert(featureOutputSizeX != 0 && featureOutputSizeY != 0);
@@ -58,6 +61,22 @@ bool	CLayerConv2D::Setup(size_t inputFeatureCount, size_t inputSizeX, size_t inp
 	memset(m_SlopesWeightAccum.Data(), 0, m_SlopesWeightAccum.StorageByteSize());
 	memset(m_SlopesOutAccum.Data(), 0, m_SlopesOutAccum.Size() * sizeof(float));
 
+	m_AdagradWeightAccum.AllocMatrix(weightsSizeY, weightsSizeX);
+	m_AdagradBiasAccum.AllocateStorage(outputSize);
+
+	for (size_t y = 0; y < m_AdagradWeightAccum.View().m_Rows; ++y)
+	{
+		float	*weightAccum = m_AdagradWeightAccum.View().GetRow(y);
+		for (size_t x = 0; x < m_AdagradWeightAccum.View().m_Columns; ++x)
+		{
+			weightAccum[x] = 1.0f;
+		}
+	}
+	for (size_t x = 0; x < m_AdagradBiasAccum.Size(); ++x)
+	{
+		m_AdagradBiasAccum.Data()[x] = 1.0f;
+	}
+
 	// Initialize weights to random floats:
 	Initializer();
 	return true;
@@ -65,43 +84,68 @@ bool	CLayerConv2D::Setup(size_t inputFeatureCount, size_t inputSizeX, size_t inp
 
 void	CLayerConv2D::FeedForward(const float *input, size_t rangeMin, size_t rangeMax)
 {
-	Convolute<CLayerConv2D, &CLayerConv2D::Kernel_ComputeNetInput>(this, input, rangeMin, rangeMax, m_ConvParams);
-	const size_t	featureOutputSizeX = GetOutputSizeX();
-	const size_t	featureOutputSizeY = GetOutputSizeY();
-	const size_t	featureStide = featureOutputSizeX * featureOutputSizeY;
-	const size_t	outputRange = (rangeMax - rangeMin) * featureStide;
-	Activation(m_Output.Data() + featureStide * rangeMin, m_NetInput.Data() + featureStide * rangeMin, outputRange);
+	SComputeNetInput_KernelIn	kernelIn;
+
+	kernelIn.m_Bias = m_Bias.Data();
+	kernelIn.m_InFeatureCount = m_InputImageCount;
+	kernelIn.m_Input = input;
+	kernelIn.m_NetInput = m_NetInput.Data();
+	kernelIn.m_OutFeatureCount = m_KernelCount;
+	kernelIn.m_Weights = m_Weights.View();
+
+	KernelConvolute<SComputeNetInput_KernelIn,
+					&CLayerConv2D::Kernel_ComputeNetInput>(kernelIn, rangeMin, rangeMax, m_ConvParams);
+
+	const size_t	featureStride = m_ConvParams.m_OutputSizeX * m_ConvParams.m_OutputSizeY;
+	const size_t	outputRange = (rangeMax - rangeMin) * featureStride;
+	Activation(m_Output.Data() + featureStride * rangeMin, m_NetInput.Data() + featureStride * rangeMin, outputRange);
 }
 
 void	CLayerConv2D::BackPropagateError(const float *prevOutput, const std::vector<float> &error, size_t rangeMin, size_t rangeMax)
 {
-	const size_t	featureOutputSizeX = GetOutputSizeX();
-	const size_t	featureOutputSizeY = GetOutputSizeY();
-	const size_t	featureStide = featureOutputSizeX * featureOutputSizeY;
-	const size_t	outputRange = (rangeMax - rangeMin) * featureStide;
+	const size_t	featureStride = m_ConvParams.m_OutputSizeX * m_ConvParams.m_OutputSizeY;
+	const size_t	outputRange = (rangeMax - rangeMin) * featureStride;
 	float			*netInputPtr = m_NetInput.Data();
 
-	// Inner layer of the neural network:
-	for (size_t i = featureStide * rangeMin; i < featureStide * rangeMax; ++i)
+	// Outter layer of the neural network:
+	for (size_t i = featureStride * rangeMin; i < featureStride * rangeMax; ++i)
 		m_SlopesOut.Data()[i] = -error[i];
-	ActivationDerivative(m_SlopesOut.Data() + featureStide * rangeMin, netInputPtr + featureStide * rangeMin, outputRange);
-	Convolute<CLayerConv2D, &CLayerConv2D::Kernel_AccumWeightsAndBiasDerivative>(this, prevOutput, rangeMin, rangeMax, m_ConvParams);
-//	AccumWeightsAndBiasDerivative(prevOutput, rangeMin, rangeMax);
+	ActivationDerivative(m_SlopesOut.Data() + featureStride * rangeMin, netInputPtr + featureStride * rangeMin, outputRange);
+
+	SAccumWeightsAndBiasDerivative_KernelIn	kernelIn;
+
+	kernelIn.m_InFeatureCount = m_InputImageCount;
+	kernelIn.m_OutFeatureCount = m_KernelCount;
+	kernelIn.m_Input = prevOutput;
+	kernelIn.m_AccumBias = m_SlopesOutAccum.Data();
+	kernelIn.m_AccumWeights = m_SlopesWeightAccum.View();
+	kernelIn.m_Slopes = m_SlopesOut.Data();
+
+	KernelConvolute<SAccumWeightsAndBiasDerivative_KernelIn,
+					&CLayerConv2D::Kernel_AccumWeightsAndBiasDerivative>(kernelIn, rangeMin, rangeMax, m_ConvParams);
 }
 
 void	CLayerConv2D::BackPropagateError(const float *prevOutput, const CLayer* nextLayer, size_t rangeMin, size_t rangeMax)
 {
-	const size_t	featureOutputSizeX = GetOutputSizeX();
-	const size_t	featureOutputSizeY = GetOutputSizeY();
-	const size_t	featureStide = featureOutputSizeX * featureOutputSizeY;
-	const size_t	outputRange = (rangeMax - rangeMin) * featureStide;
+	const size_t	featureStride = m_ConvParams.m_OutputSizeX * m_ConvParams.m_OutputSizeY;
+	const size_t	outputRange = (rangeMax - rangeMin) * featureStride;
 	float			*netInputPtr = m_NetInput.Data();
 
 	// Inner layer of the neural network:
-	nextLayer->GatherSlopes(m_SlopesOut.Data(), featureStide * rangeMin, featureStide * rangeMax);
-	ActivationDerivative(m_SlopesOut.Data() + featureStide * rangeMin, netInputPtr + featureStide * rangeMin, outputRange);
-	Convolute<CLayerConv2D, &CLayerConv2D::Kernel_AccumWeightsAndBiasDerivative>(this, prevOutput, rangeMin, rangeMax, m_ConvParams);
-//	AccumWeightsAndBiasDerivative(prevOutput, rangeMin, rangeMax);
+	nextLayer->GatherSlopes(m_SlopesOut.Data(), m_Output.Data(), featureStride * rangeMin, featureStride * rangeMax);
+	ActivationDerivative(m_SlopesOut.Data() + featureStride * rangeMin, netInputPtr + featureStride * rangeMin, outputRange);
+
+	SAccumWeightsAndBiasDerivative_KernelIn	kernelIn;
+
+	kernelIn.m_InFeatureCount = m_InputImageCount;
+	kernelIn.m_OutFeatureCount = m_KernelCount;
+	kernelIn.m_Input = prevOutput;
+	kernelIn.m_AccumBias = m_SlopesOutAccum.Data();
+	kernelIn.m_AccumWeights = m_SlopesWeightAccum.View();
+	kernelIn.m_Slopes = m_SlopesOut.Data();
+
+	KernelConvolute<SAccumWeightsAndBiasDerivative_KernelIn,
+					&CLayerConv2D::Kernel_AccumWeightsAndBiasDerivative>(kernelIn, rangeMin, rangeMax, m_ConvParams);
 }
 
 void	CLayerConv2D::UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, size_t rangeMax)
@@ -120,138 +164,144 @@ void	CLayerConv2D::UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, s
 	memset(m_SlopesOutAccum.Data() + rangeMin * featureOutputStride, 0, outputRange * featureOutputStride * sizeof(float));
 }
 
-void	CLayerConv2D::GatherSlopes(float *dst, size_t rangeMin, size_t rangeMax) const
+void	CLayerConv2D::GatherSlopes(float *dst, const float *prevOutput, size_t rangeMin, size_t rangeMax) const
 {
+	(void)prevOutput;
 	const size_t	featureInputStride = m_ConvParams.m_InputSizeX * m_ConvParams.m_InputSizeY;
 	const size_t	dstRange = rangeMax - rangeMin;
-	ConvoluteTranspose<CLayerConv2D, &CLayerConv2D::Kernel_GatherSlopes>(	this,
-																			dst,
-																			rangeMin / featureInputStride,
-																			rangeMax / featureInputStride,
-																			m_ConvParams);
+
+	memset(dst, 0, (rangeMax - rangeMin) * sizeof(float));
+
+	SGatherSlopes_KernelIn	kernelIn;
+
+	kernelIn.m_InFeatureCount = m_InputImageCount;
+	kernelIn.m_OutFeatureCount = m_KernelCount;
+	kernelIn.m_Slopes = m_SlopesOut.Data();
+	kernelIn.m_Weights = m_Weights.View();
+	kernelIn.m_Output = dst;
+
+	KernelConvolute<SGatherSlopes_KernelIn,
+					&CLayerConv2D::Kernel_GatherSlopes>(kernelIn,
+														rangeMin / featureInputStride,
+														rangeMax / featureInputStride,
+														m_ConvParams);
 }
 
 size_t	CLayerConv2D::GetThreadingHint() const
 {
-	size_t test1 = GetOutputSizeX();
-	size_t test2 = GetOutputSizeY();
-	return m_Weights.View().m_Columns * m_Weights.View().m_Rows * GetOutputSizeX() * GetOutputSizeY();
+//	size_t test1 = GetOutputSizeX();
+//	size_t test2 = GetOutputSizeY();
+//	return m_Weights.View().m_Columns * m_Weights.View().m_Rows * GetOutputSizeX() * GetOutputSizeY();
+	return 1;
 }
 
 size_t	CLayerConv2D::GetDomainSize() const
 {
-	return m_ConvParams.m_KernelCount;
+	return m_KernelCount;
 }
 
 // This is going called for each convolution
 // Be careful !
 
-void	CLayerConv2D::Kernel_AccumWeightsAndBiasDerivative(	const float *input,
-															const SConvolutionParams &conv,
-															size_t featureIdx,
-															int startInX, int stopInX,
-															int startInY, int stopInY,
-															int convX, int convY,
-															int paddedConvX, int paddedConvY)
+void	CLayerConv2D::Kernel_AccumWeightsAndBiasDerivative(	const SAccumWeightsAndBiasDerivative_KernelIn &input,
+															const SKernelRange &range,
+															const SConvolutionParams &conv)
 {
 	const size_t	featureInputStride = conv.m_InputSizeX * conv.m_InputSizeY;
+	const size_t	featureOutputStride = conv.m_OutputSizeX * conv.m_OutputSizeY;
 	const size_t	outFeatureWeightStride = conv.m_KernelSizeX * conv.m_KernelSizeY;
-	const size_t	featureOutputSizeX = conv.GetConvOutputSizeX();
-	const size_t	featureOutputSizeY = conv.GetConvOutputSizeY();
-	float			*weightAccumPtr = m_SlopesWeightAccum.View().GetRow(featureIdx);
-	const float		*slopePtr = m_SlopesOut.Data();
-	float			*slopeAccumPtr = m_SlopesOutAccum.Data();
-	const size_t	outIdx =	featureIdx * featureOutputSizeX * featureOutputSizeY +
-								convY * featureOutputSizeX +
-								convX;
-	const float		slope = slopePtr[outIdx];
+	float			*weightsAccumPtr = input.m_AccumWeights.GetRow(range.m_FeatureIdx);
+	const size_t	outIdx =	range.m_FeatureIdx * featureOutputStride +
+								range.m_ConvIdxY * conv.m_OutputSizeX +
+								range.m_ConvIdxX;
+	const float		slope = input.m_Slopes[outIdx];
 
 	// For each input feature:
-	for (size_t inFeatureIdx = 0; inFeatureIdx < m_ConvParams.m_InputImageCount; ++inFeatureIdx)
+	for (size_t inFeatureIdx = 0; inFeatureIdx < input.m_InFeatureCount; ++inFeatureIdx)
 	{
-		for (size_t inY = startInY; inY < stopInY; ++inY)
+		for (size_t inY = range.m_StartConvY; inY < range.m_StopConvY; ++inY)
 		{
-			for (size_t inX = startInX; inX < stopInX; ++inX)
+			for (size_t inX = range.m_StartConvX; inX < range.m_StopConvX; ++inX)
 			{
-				size_t		inputIdx =	inFeatureIdx * featureInputStride +
-										(inY + paddedConvY) * m_ConvParams.m_InputSizeX +
-										(inX + paddedConvX);
-				size_t		weightIdx = inFeatureIdx * outFeatureWeightStride + 
-										inY * m_ConvParams.m_KernelSizeX + inX;
-				weightAccumPtr[weightIdx] += input[inputIdx] * slope;
+				size_t	inputIdx =	inFeatureIdx * featureInputStride +
+									inY * conv.m_InputSizeX +
+									inX;
+				size_t	weightIdx = inFeatureIdx * outFeatureWeightStride + 
+									(inY - range.m_ConvOffsetY) * conv.m_KernelSizeX +
+									(inX - range.m_ConvOffsetX);
+				weightsAccumPtr[weightIdx] += input.m_Input[inputIdx] * slope;
+				assert(abs(weightsAccumPtr[weightIdx]) < 100000000.0f);
 			}
 		}
 	}
 }
 
-void	CLayerConv2D::Kernel_ComputeNetInput(	const float *input,
-												const SConvolutionParams &conv,
-												size_t featureIdx,
-												int startInX, int stopInX,
-												int startInY, int stopInY,
-												int convX, int convY,
-												int paddedConvX, int paddedConvY)
+void	CLayerConv2D::Kernel_ComputeNetInput(	const SComputeNetInput_KernelIn &input,
+												const SKernelRange &range,
+												const SConvolutionParams &conv)
 {
 	const size_t	featureInputStride = conv.m_InputSizeX * conv.m_InputSizeY;
+	const size_t	featureOutputStride = conv.m_OutputSizeX * conv.m_OutputSizeY;
 	const size_t	outFeatureWeightStride = conv.m_KernelSizeX * conv.m_KernelSizeY;
-	const size_t	featureOutputSizeX = conv.GetConvOutputSizeX();
-	const size_t	featureOutputSizeY = conv.GetConvOutputSizeY();
-	const float		*weightsPtr = m_Weights.View().GetRow(featureIdx);
+	const float		*weightsPtr = input.m_Weights.GetRow(range.m_FeatureIdx);
 
 	float		accum = 0.0f;
 	// For each input feature:
-	for (size_t inFeatureIdx = 0; inFeatureIdx < conv.m_InputImageCount; ++inFeatureIdx)
+	for (size_t inFeatureIdx = 0; inFeatureIdx < input.m_InFeatureCount; ++inFeatureIdx)
 	{
-		for (size_t inY = startInY; inY < stopInY; ++inY)
+		for (size_t inY = range.m_StartConvY; inY < range.m_StopConvY; ++inY)
 		{
-			for (size_t inX = startInX; inX < stopInX; ++inX)
+			for (size_t inX = range.m_StartConvX; inX < range.m_StopConvX; ++inX)
 			{
 				size_t	inputIdx =	inFeatureIdx * featureInputStride +
-									(inY + paddedConvY) * conv.m_InputSizeX +
-									(inX + paddedConvX);
+									inY * conv.m_InputSizeX +
+									inX;
 				size_t	weightIdx = inFeatureIdx * outFeatureWeightStride + 
-									inY * conv.m_KernelSizeX + inX;
-				accum += input[inputIdx] * weightsPtr[weightIdx];
+									(inY - range.m_ConvOffsetY) * conv.m_KernelSizeX +
+									(inX - range.m_ConvOffsetX);
+				accum += input.m_Input[inputIdx] * weightsPtr[weightIdx];
+				assert(abs(accum) < 100000000.0f);
 			}
 		}
 	}
-	const size_t	outIdx =	featureIdx * featureOutputSizeX * featureOutputSizeY +
-								convY * featureOutputSizeX +
-								convX;
-	accum += m_Bias.Data()[outIdx];
-	m_NetInput.Data()[outIdx] = accum;
+	const size_t	outIdx =	range.m_FeatureIdx * featureOutputStride +
+								range.m_ConvIdxY * conv.m_OutputSizeX +
+								range.m_ConvIdxX;
+	accum += input.m_Bias[outIdx];
+	input.m_NetInput[outIdx] = accum;
+	assert(abs(input.m_NetInput[outIdx]) < 100000000.0f);
 }
 
-void	CLayerConv2D::Kernel_GatherSlopes(	float *output,
-											const SConvolutionParams &conv,
-											size_t inFeatureIdx,
-											size_t outFeatureIdx,
-											int startInX, int stopInX,
-											int startInY, int stopInY,
-											int convX, int convY,
-											int paddedConvX, int paddedConvY) const
+void	CLayerConv2D::Kernel_GatherSlopes(	const SGatherSlopes_KernelIn &input,
+											const SKernelRange &range,
+											const SConvolutionParams &conv)
 {
-	const size_t	featureInputStride = conv.m_InputSizeX * conv.m_InputSizeY;
-	const size_t	outFeatureWeightStride = conv.m_KernelSizeX * conv.m_KernelSizeY;
-	const size_t	featureOutputSizeX = conv.GetConvOutputSizeX();
-	const size_t	featureOutputSizeY = conv.GetConvOutputSizeY();
-	float			*weightsPtr = m_Weights.View().GetRow(outFeatureIdx);
-	const float		*slopePtr = m_SlopesOut.Data();
-	const size_t	outIdx =	outFeatureIdx * featureOutputSizeX * featureOutputSizeY +
-								convY * featureOutputSizeX +
-								convX;
-	const float		slope = slopePtr[outIdx];
 
-	for (size_t inY = startInY; inY < stopInY; ++inY)
+	const size_t	featureInputStride = conv.m_InputSizeX * conv.m_InputSizeY;
+	const size_t	featureOutputStride = conv.m_OutputSizeX * conv.m_OutputSizeY;
+	const size_t	outFeatureWeightStride = conv.m_KernelSizeX * conv.m_KernelSizeY;
+
+	// For each output feature:
+	for (size_t outFeatureIdx = 0; outFeatureIdx < input.m_OutFeatureCount; ++outFeatureIdx)
 	{
-		for (size_t inX = startInX; inX < stopInX; ++inX)
+		const size_t	outIdx =	outFeatureIdx * featureOutputStride +
+									range.m_ConvIdxY * conv.m_OutputSizeX +
+									range.m_ConvIdxX;
+		const float		slope = input.m_Slopes[outIdx];
+		float			*weightsPtr = input.m_Weights.GetRow(outFeatureIdx);
+
+		for (size_t inY = range.m_StartConvY; inY < range.m_StopConvY; ++inY)
 		{
-			size_t	dstIdx =	inFeatureIdx * featureInputStride +
-								(inY + paddedConvY) * conv.m_InputSizeX +
-								(inX + paddedConvX);
-			size_t	weightIdx = inFeatureIdx * outFeatureWeightStride + 
-								inY * conv.m_KernelSizeX + inX;
-			output[dstIdx] += slope * weightsPtr[weightIdx];
+			for (size_t inX = range.m_StartConvX; inX < range.m_StopConvX; ++inX)
+			{
+				size_t	dstIdx =	range.m_FeatureIdx * featureInputStride +
+									inY * conv.m_InputSizeX +
+									inX;
+				size_t	weightIdx = range.m_FeatureIdx * outFeatureWeightStride + 
+									(inY - range.m_ConvOffsetY) * conv.m_KernelSizeX +
+									(inX - range.m_ConvOffsetX);
+				input.m_Output[dstIdx] += slope * weightsPtr[weightIdx];
+			}
 		}
 	}
 }

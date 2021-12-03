@@ -161,6 +161,7 @@
     <ClInclude Include="DumbANN\LayerDense.h" />
     <ClInclude Include="DumbANN\LayerMaxPooling.h" />
     <ClInclude Include="DumbANN\NeuralNetwork.h" />
+    <ClInclude Include="DumbANN\NeuronKernel.h" />
     <ClInclude Include="DumbANN\NeuronStorages.h" />
     <ClInclude Include="DumbANN\TaskManager.h" />
     <ClInclude Include="UnitTests.h" />

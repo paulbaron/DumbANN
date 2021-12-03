@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LayerBase.h"
+#include "NeuronKernel.h"
 
 class	CLayerMaxPooling2D : public CLayer
 {
@@ -16,13 +17,43 @@ public:
 	virtual void	BackPropagateError(const float *prevOutput, const std::vector<float> &error, size_t rangeMin, size_t rangeMax) override;
 	virtual void	BackPropagateError(const float* prevOutput, const CLayer *nextLayer, size_t rangeMin, size_t rangeMax) override;
 	virtual void	UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, size_t rangeMax) override;
-	virtual void	GatherSlopes(float *dst, size_t rangeMin, size_t rangeMax) const override;
+	virtual void	GatherSlopes(float *dst, const float *prevOutput, size_t rangeMin, size_t rangeMax) const override;
 
 	virtual size_t	GetThreadingHint() const override;
 	virtual size_t	GetDomainSize() const override;
 
+	size_t			GetFeatureCount() const { return m_FeatureCount; }
+	size_t			GetFeatureSizeX() const { return m_ConvParams.m_KernelSizeX; }
+	size_t			GetFeatureSizeY() const { return m_ConvParams.m_KernelSizeY; }
+	size_t			GetOutputSizeX() const { return m_ConvParams.m_OutputSizeX; }
+	size_t			GetOutputSizeY() const { return m_ConvParams.m_OutputSizeY; }
+
 private:
-	void			AccumWeightsAndBiasDerivative(const float *prevOutput, size_t rangeMin, size_t rangeMax);
+	struct	SComputeOutput_KernelIn
+	{
+		const float				*m_Input;
+		float					*m_Output;
+
+		size_t					m_FeatureCount;
+	};
+
+	struct	SGatherSlopes_KernelIn
+	{
+		const float				*m_Input;
+		float					*m_Output;
+
+		const float				*m_Slopes;
+
+		size_t					m_FeatureCount;
+	};
+
+	static void		Kernel_ComputeOutput(	const SComputeOutput_KernelIn &input,
+											const SKernelRange &range,
+											const SConvolutionParams &conv);
+	static void		Kernel_GatherSlopes(const SGatherSlopes_KernelIn &input,
+										const SKernelRange &range,
+										const SConvolutionParams &conv);
 
 	SConvolutionParams	m_ConvParams;
+	size_t				m_FeatureCount;
 };

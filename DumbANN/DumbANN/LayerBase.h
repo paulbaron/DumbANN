@@ -49,7 +49,7 @@ public:
 	virtual void	BackPropagateError(const float *prevOutput, const std::vector<float> &error, size_t rangeMin, size_t rangeMax) = 0;
 	virtual void	BackPropagateError(const float* prevOutput, const CLayer *nextLayer, size_t rangeMin, size_t rangeMax) = 0;
 	virtual void	UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, size_t rangeMax) = 0;
-	virtual void	GatherSlopes(float *dst, size_t rangeMin, size_t rangeMax) const = 0;
+	virtual void	GatherSlopes(float *dst, const float *prevOutput, size_t rangeMin, size_t rangeMax) const = 0;
 
 	virtual size_t	GetThreadingHint() const = 0;
 	virtual size_t	GetDomainSize() const = 0;
