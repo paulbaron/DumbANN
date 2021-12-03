@@ -32,6 +32,11 @@ enum class	ERandInitializer
 	RandHe
 };
 
+const char	*kActivationNames[];
+const char	*kOptimizationNames[];
+const char	*kRegularizationNames[];
+const char	*kInitializerNames[];
+
 class	CLayer
 {
 public:
@@ -49,7 +54,8 @@ public:
 	virtual void	BackPropagateError(const float *prevOutput, const std::vector<float> &error, size_t rangeMin, size_t rangeMax) = 0;
 	virtual void	BackPropagateError(const float* prevOutput, const CLayer *nextLayer, size_t rangeMin, size_t rangeMax) = 0;
 	virtual void	UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, size_t rangeMax) = 0;
-	virtual void	GatherSlopes(float *dst, const float *prevOutput, size_t rangeMin, size_t rangeMax) const = 0;
+	virtual void	GatherSlopes(float *dst, const CLayer *prevLayer, size_t rangeMin, size_t rangeMax) const = 0;
+	virtual void	PrintInfo() const = 0;
 
 	virtual size_t	GetThreadingHint() const = 0;
 	virtual size_t	GetDomainSize() const = 0;
@@ -63,7 +69,7 @@ public:
 	void			Initializer();
 
 protected:
-
+	void			PrintBasicInfo() const;
 	void			InitializeRandomRange(float min, float max);
 
 	// Activations:

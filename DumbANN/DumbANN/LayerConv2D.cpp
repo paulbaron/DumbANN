@@ -132,7 +132,6 @@ void	CLayerConv2D::BackPropagateError(const float *prevOutput, const CLayer* nex
 	float			*netInputPtr = m_NetInput.Data();
 
 	// Inner layer of the neural network:
-	nextLayer->GatherSlopes(m_SlopesOut.Data(), m_Output.Data(), featureStride * rangeMin, featureStride * rangeMax);
 	ActivationDerivative(m_SlopesOut.Data() + featureStride * rangeMin, netInputPtr + featureStride * rangeMin, outputRange);
 
 	SAccumWeightsAndBiasDerivative_KernelIn	kernelIn;
@@ -164,13 +163,13 @@ void	CLayerConv2D::UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, s
 	memset(m_SlopesOutAccum.Data() + rangeMin * featureOutputStride, 0, outputRange * featureOutputStride * sizeof(float));
 }
 
-void	CLayerConv2D::GatherSlopes(float *dst, const float *prevOutput, size_t rangeMin, size_t rangeMax) const
+void	CLayerConv2D::GatherSlopes(float *dst, const CLayer *prevLayer, size_t rangeMin, size_t rangeMax) const
 {
-	(void)prevOutput;
+	(void)prevLayer;
 	const size_t	featureInputStride = m_ConvParams.m_InputSizeX * m_ConvParams.m_InputSizeY;
 	const size_t	dstRange = rangeMax - rangeMin;
 
-	memset(dst, 0, (rangeMax - rangeMin) * sizeof(float));
+	memset(dst + rangeMin, 0, (rangeMax - rangeMin) * sizeof(float));
 
 	SGatherSlopes_KernelIn	kernelIn;
 
@@ -187,12 +186,22 @@ void	CLayerConv2D::GatherSlopes(float *dst, const float *prevOutput, size_t rang
 														m_ConvParams);
 }
 
+void	CLayerConv2D::PrintInfo() const
+{
+	printf("\tLayer Convolution 2D:\n");
+	printf(	"\t\tInput: %zu %zux%zu (padding: %zu)\n",
+			m_InputImageCount, m_ConvParams.m_InputSizeX, m_ConvParams.m_InputSizeY,
+			m_ConvParams.m_InputPadding);
+	printf(	"\t\tFeatures: %zu %zux%zu (stride: %zu)\n",
+			m_KernelCount, m_ConvParams.m_KernelSizeX, m_ConvParams.m_KernelSizeY,
+			m_ConvParams.m_KernelStride);
+	printf("\t\tOutput: %zu %zux%zu\n", m_KernelCount, m_ConvParams.m_OutputSizeX, m_ConvParams.m_OutputSizeY);
+	PrintBasicInfo();
+}
+
 size_t	CLayerConv2D::GetThreadingHint() const
 {
-//	size_t test1 = GetOutputSizeX();
-//	size_t test2 = GetOutputSizeY();
-//	return m_Weights.View().m_Columns * m_Weights.View().m_Rows * GetOutputSizeX() * GetOutputSizeY();
-	return 1;
+	return GetOutputSizeX() * GetOutputSizeY() * m_KernelCount;
 }
 
 size_t	CLayerConv2D::GetDomainSize() const
@@ -216,6 +225,8 @@ void	CLayerConv2D::Kernel_AccumWeightsAndBiasDerivative(	const SAccumWeightsAndB
 								range.m_ConvIdxX;
 	const float		slope = input.m_Slopes[outIdx];
 
+	input.m_AccumBias[outIdx] += slope;
+	assert(abs(input.m_AccumBias[outIdx]) < 100000000.0f);
 	// For each input feature:
 	for (size_t inFeatureIdx = 0; inFeatureIdx < input.m_InFeatureCount; ++inFeatureIdx)
 	{
@@ -301,6 +312,7 @@ void	CLayerConv2D::Kernel_GatherSlopes(	const SGatherSlopes_KernelIn &input,
 									(inY - range.m_ConvOffsetY) * conv.m_KernelSizeX +
 									(inX - range.m_ConvOffsetX);
 				input.m_Output[dstIdx] += slope * weightsPtr[weightIdx];
+				assert(abs(input.m_Output[dstIdx]) < 1000000000.0f);
 			}
 		}
 	}

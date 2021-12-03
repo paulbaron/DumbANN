@@ -22,6 +22,9 @@ public:
 
 	const CNeuronVector		&GetOutput() const { return m_Layers.back()->GetOutput(); }
 	void					DestroyThreadsIFN() { m_TaskManager.DestroyThreadsIFN(); }
+
+	void	PrintDetails() const;
+
 private:
 	void	ResetTrainingSteps() { m_CurrentTrainingStep = 0; }
 

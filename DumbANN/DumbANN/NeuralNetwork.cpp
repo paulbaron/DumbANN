@@ -63,17 +63,32 @@ bool	CNeuralNetwork::BackPropagateError(const float *input, const std::vector<fl
 		for (int i = m_Layers.size() - 1; i >= 0; --i)
 		{
 			CLayer			*layer = m_Layers[i];
-			const float		*prevOutput = (i == 0) ? input : m_Layers[i - 1]->GetOutput().Data();
 			const CLayer	*nextLayer = (i == m_Layers.size() - 1) ? nullptr : m_Layers[i + 1];
+			const CLayer	*prevLayer = (i == 0) ? nullptr : m_Layers[i - 1];
+			const float		*prevOutput = (prevLayer == nullptr) ? input : prevLayer->GetOutput().Data();
 
-			std::function<void(size_t, size_t)>	backProp = [layer, prevOutput, nextLayer, &error](size_t minRange, size_t maxRange)
+			std::function<void(size_t, size_t)>	backProp = [&](size_t minRange, size_t maxRange)
 			{
 				if (nextLayer == nullptr)
 					layer->BackPropagateError(prevOutput, error, minRange, maxRange);
 				else
+				{
 					layer->BackPropagateError(prevOutput, nextLayer, minRange, maxRange);
+				}
 			};
 			m_TaskManager.MultithreadRange(backProp, layer->GetDomainSize(), layer->GetThreadingHint());
+			if (prevLayer != nullptr)
+			{
+				std::function<void(size_t, size_t)>	gatherSlopes = [&](size_t minRange, size_t maxRange)
+				{
+					layer->GatherSlopes(prevLayer->GetSlopesOut().Data(),
+										prevLayer,
+										minRange, maxRange);
+				};
+				m_TaskManager.MultithreadRange(	gatherSlopes,
+												prevLayer->GetSlopesOut().Size(),
+												prevLayer->GetSlopesOut().Size());
+			}
 		}
 	}
 	++m_CurrentTrainingStep;
@@ -94,4 +109,16 @@ bool	CNeuralNetwork::UpdateWeightAndBiases()
 	}
 	m_TaskManager.CallOnceJobFinished(std::function<void()>([this](){ ResetTrainingSteps(); }));
 	return true;
+}
+
+void	CNeuralNetwork::PrintDetails() const
+{
+	printf("-------------------------------\n");
+	printf("Neural Network with %zu layers:\n", m_Layers.size());
+	for (const CLayer *layer : m_Layers)
+	{
+		printf("-------------------------------\n");
+		layer->PrintInfo();
+	}
+	printf("-------------------------------\n");
 }

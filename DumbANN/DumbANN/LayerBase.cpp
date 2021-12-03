@@ -3,14 +3,44 @@
 #include <xmmintrin.h>
 #include <assert.h>
 
+const char	*kActivationNames[]
+{
+	"Relu",
+	"Sigmoid",
+	"Tanh",
+	"Linear"
+};
+
+const char	*kOptimizationNames[]
+{
+	"SGD",
+	"Adagrad"
+};
+
+const char	*kRegularizationNames[]
+{
+	"None",
+	"L1",
+	"L2"
+};
+
+const char	*kInitializerNames[]
+{
+	"Rand Uniform [0, 1]",
+	"Rand Uniform [-1, 1]",
+	"Rand Xavier",
+	"Rand Xavier Normalized",
+	"Rand He"
+};
+
 CLayer::CLayer()
 :	m_InputSize(0)
 ,	m_Activation(EActivation::Sigmoid)
-,	m_Optimization(EOptimization::Adagrad)
+,	m_Optimization(EOptimization::SGD)
 ,	m_Initializer(ERandInitializer::RandXavier)
 ,	m_Regularizer(ERegularizer::None)
 ,	m_RegularizerRatio(1e-5)
-,	m_LearningRate(1.0f)
+,	m_LearningRate(0.1f)
 ,	m_Inertia(0.0f)
 {
 }
@@ -53,6 +83,15 @@ void	CLayer::Initializer()
 	{
 		assert(false);
 	}
+}
+
+void	CLayer::PrintBasicInfo() const
+{
+	printf("\t\tActivation: %s\n", kActivationNames[(int)m_Activation]);
+	printf(	"\t\tOptimization: %s (regularize: %s)\n",
+			kOptimizationNames[(int)m_Optimization],
+			kRegularizationNames[(int)m_Regularizer]);
+	printf("\t\tWeight Initializer: %s\n", kInitializerNames[(int)m_Initializer]);
 }
 
 void	CLayer::InitializeRandomRange(float min, float max)

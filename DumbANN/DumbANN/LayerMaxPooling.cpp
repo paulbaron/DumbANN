@@ -64,33 +64,48 @@ void	CLayerMaxPooling2D::BackPropagateError(const float *prevOutput, const std::
 
 void	CLayerMaxPooling2D::BackPropagateError(const float *prevOutput, const CLayer* nextLayer, size_t rangeMin, size_t rangeMax)
 {
-	const size_t	featureStide = m_ConvParams.m_OutputSizeX * m_ConvParams.m_OutputSizeY;
-
-	nextLayer->GatherSlopes(m_SlopesOut.Data(), m_Output.Data(), featureStide * rangeMin, featureStide * rangeMax);
 }
 
 void	CLayerMaxPooling2D::UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, size_t rangeMax)
 {
 }
 
-void	CLayerMaxPooling2D::GatherSlopes(float *dst, const float *prevOutput, size_t rangeMin, size_t rangeMax) const
+void	CLayerMaxPooling2D::GatherSlopes(float *dst, const CLayer *prevLayer, size_t rangeMin, size_t rangeMax) const
 {
+	if (prevLayer == nullptr)
+	{
+		assert(false); // CLayerMaxPooling2D cannot be first layer
+	}
+
 	const size_t			featureInputStride = m_ConvParams.m_InputSizeX * m_ConvParams.m_InputSizeY;
 	SGatherSlopes_KernelIn	kernelIn;
 
 	kernelIn.m_FeatureCount = m_FeatureCount;
 	kernelIn.m_Output = dst;
-	kernelIn.m_Input = prevOutput;
+	kernelIn.m_Input = prevLayer->GetOutput().Data();
 	kernelIn.m_Slopes = m_SlopesOut.Data();
 
-	memset(dst, 0, (rangeMax - rangeMin) * sizeof(float));
+	memset(dst + rangeMin, 0, (rangeMax - rangeMin) * sizeof(float));
 	KernelConvolute<SGatherSlopes_KernelIn,
 					&CLayerMaxPooling2D::Kernel_GatherSlopes>(kernelIn, rangeMin / featureInputStride, rangeMax / featureInputStride, m_ConvParams);
 }
 
+void	CLayerMaxPooling2D::PrintInfo() const
+{
+	printf("\tLayer Max Pooling 2D:\n");
+	printf("\t\tInput: %zu %zux%zu (padding: %zu)\n",
+			m_FeatureCount, m_ConvParams.m_InputSizeX, m_ConvParams.m_InputSizeY,
+			m_ConvParams.m_InputPadding);
+	printf(	"\t\tPool size: %zux%zu (stride: %zu)\n",
+			m_ConvParams.m_KernelSizeX, m_ConvParams.m_KernelSizeY,
+			m_ConvParams.m_KernelStride);
+	printf("\t\tOutput: %zu %zux%zu\n",
+			m_FeatureCount, m_ConvParams.m_OutputSizeX, m_ConvParams.m_OutputSizeY);
+}
+
 size_t	CLayerMaxPooling2D::GetThreadingHint() const
 {
-	return 1;
+	return m_FeatureCount * GetOutputSizeX() * GetOutputSizeY();
 }
 
 size_t	CLayerMaxPooling2D::GetDomainSize() const
@@ -105,7 +120,7 @@ void	CLayerMaxPooling2D::Kernel_ComputeOutput(	const SComputeOutput_KernelIn &in
 	const size_t	featureInputStride = conv.m_InputSizeX * conv.m_InputSizeY;
 	const size_t	featureOutputStride = conv.m_OutputSizeX * conv.m_OutputSizeY;
 	const size_t	outFeatureWeightStride = conv.m_KernelSizeX * conv.m_KernelSizeY;
-	float			maxValue = FLT_MIN;
+	float			maxValue = -FLT_MAX;
 
 	for (size_t inY = range.m_StartConvY; inY < range.m_StopConvY; ++inY)
 	{
@@ -115,6 +130,7 @@ void	CLayerMaxPooling2D::Kernel_ComputeOutput(	const SComputeOutput_KernelIn &in
 								inY * conv.m_InputSizeX +
 								inX;
 			maxValue = std::max(maxValue, input.m_Input[inputIdx]);
+			assert(abs(maxValue) < 100000000.0f);
 		}
 	}
 	const size_t	outIdx =	range.m_FeatureIdx * featureOutputStride +
@@ -122,7 +138,6 @@ void	CLayerMaxPooling2D::Kernel_ComputeOutput(	const SComputeOutput_KernelIn &in
 								range.m_ConvIdxX;
 	input.m_Output[outIdx] = maxValue;
 	assert(abs(input.m_Output[outIdx]) < 100000000.0f);
-	assert(abs(input.m_Output[outIdx]) > 0.0000000000001f);
 }
 
 void	CLayerMaxPooling2D::Kernel_GatherSlopes(const SGatherSlopes_KernelIn &input,
@@ -132,7 +147,7 @@ void	CLayerMaxPooling2D::Kernel_GatherSlopes(const SGatherSlopes_KernelIn &input
 	const size_t	featureInputStride = conv.m_InputSizeX * conv.m_InputSizeY;
 	const size_t	featureOutputStride = conv.m_OutputSizeX * conv.m_OutputSizeY;
 	const size_t	outFeatureWeightStride = conv.m_KernelSizeX * conv.m_KernelSizeY;
-	float			maxValue = FLT_MIN;
+	float			maxValue = -FLT_MAX;
 	size_t			maxIdx = 0;
 
 	for (size_t inY = range.m_StartConvY; inY < range.m_StopConvY; ++inY)
