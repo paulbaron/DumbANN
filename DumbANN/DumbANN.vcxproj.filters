@@ -19,6 +19,12 @@
     <Filter Include="Fichiers d%27en-tête\DumbANN">
       <UniqueIdentifier>{a39c29e1-d820-46dc-b9b8-464c3e13bb17}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Fichiers d%27en-tête\Profile">
+      <UniqueIdentifier>{98d1f77b-445a-4a62-901b-6db2ef6df1c6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Fichiers sources\Profile">
+      <UniqueIdentifier>{a5a86097-1936-4646-b4be-9fb6b078068e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -48,6 +54,15 @@
     <ClCompile Include="DumbANN\LayerMaxPooling.cpp">
       <Filter>Fichiers sources\DumbANN</Filter>
     </ClCompile>
+    <ClCompile Include="DumbANN\LayerDropout.cpp">
+      <Filter>Fichiers sources\DumbANN</Filter>
+    </ClCompile>
+    <ClCompile Include="DumbANN\LayerSoftmax.cpp">
+      <Filter>Fichiers sources\DumbANN</Filter>
+    </ClCompile>
+    <ClCompile Include="MicroProfile\microprofile.cpp">
+      <Filter>Fichiers sources\Profile</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DumbANN\NeuronStorages.h">
@@ -75,6 +90,21 @@
       <Filter>Fichiers d%27en-tête\DumbANN</Filter>
     </ClInclude>
     <ClInclude Include="DumbANN\LayerMaxPooling.h">
+      <Filter>Fichiers d%27en-tête\DumbANN</Filter>
+    </ClInclude>
+    <ClInclude Include="DumbANN\LayerDropout.h">
+      <Filter>Fichiers d%27en-tête\DumbANN</Filter>
+    </ClInclude>
+    <ClInclude Include="DumbANN\LayerSoftmax.h">
+      <Filter>Fichiers d%27en-tête\DumbANN</Filter>
+    </ClInclude>
+    <ClInclude Include="MicroProfile\microprofile.h">
+      <Filter>Fichiers d%27en-tête\Profile</Filter>
+    </ClInclude>
+    <ClInclude Include="MicroProfile\microprofile_html.h">
+      <Filter>Fichiers d%27en-tête\Profile</Filter>
+    </ClInclude>
+    <ClInclude Include="DumbANN\DumbANNConfig.h">
       <Filter>Fichiers d%27en-tête\DumbANN</Filter>
     </ClInclude>
   </ItemGroup>

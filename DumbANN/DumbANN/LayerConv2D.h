@@ -68,15 +68,15 @@ private:
 		size_t					m_OutFeatureCount;
 	};
 
-	static void		Kernel_AccumWeightsAndBiasDerivative(	const SAccumWeightsAndBiasDerivative_KernelIn &input,
+	__forceinline static void		Kernel_AccumWeightsAndBiasDerivative(	const SAccumWeightsAndBiasDerivative_KernelIn &input,
+																			const SKernelRange &range,
+																			const SConvolutionParams &conv);
+	__forceinline static void		Kernel_ComputeNetInput(	const SComputeNetInput_KernelIn &input,
 															const SKernelRange &range,
 															const SConvolutionParams &conv);
-	static void		Kernel_ComputeNetInput(	const SComputeNetInput_KernelIn &input,
-											const SKernelRange &range,
-											const SConvolutionParams &conv);
-	static void		Kernel_GatherSlopes(const SGatherSlopes_KernelIn &input,
-										const SKernelRange &range,
-										const SConvolutionParams &conv);
+	__forceinline static void		Kernel_GatherSlopes(const SGatherSlopes_KernelIn &input,
+														const SKernelRange &range,
+														const SConvolutionParams &conv);
 
 	SConvolutionParams	m_ConvParams;
 	size_t				m_KernelCount;

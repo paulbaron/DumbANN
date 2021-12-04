@@ -265,8 +265,11 @@ void	CNeuronMatrix::ComputeError(float *dstProd, const float *src, const SConstN
 		for (size_t y = 0; y < mul.m_Rows; ++y)
 		{
 			const float 	*mulData = mul.GetRow(y) + x;
+			assert(abs(*mulData) < 1000000.0f);
+			assert(abs(src[y]) < 1000000.0f);
 			dstValue += src[y] * *mulData;
 		}
+		assert(abs(dstValue) < 1000000.0f);
 		dstProd[x] = dstValue;
 	}
 #else

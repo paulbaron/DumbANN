@@ -48,12 +48,12 @@ private:
 		size_t					m_FeatureCount;
 	};
 
-	static void		Kernel_ComputeOutput(	const SComputeOutput_KernelIn &input,
-											const SKernelRange &range,
-											const SConvolutionParams &conv);
-	static void		Kernel_GatherSlopes(const SGatherSlopes_KernelIn &input,
-										const SKernelRange &range,
-										const SConvolutionParams &conv);
+	__forceinline static void		Kernel_ComputeOutput(	const SComputeOutput_KernelIn &input,
+															const SKernelRange &range,
+															const SConvolutionParams &conv);
+	__forceinline static void		Kernel_GatherSlopes(const SGatherSlopes_KernelIn &input,
+														const SKernelRange &range,
+														const SConvolutionParams &conv);
 
 	SConvolutionParams	m_ConvParams;
 	size_t				m_FeatureCount;

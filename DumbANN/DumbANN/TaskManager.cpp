@@ -1,10 +1,11 @@
 #include "TaskManager.h"
+#include "DumbANNConfig.h"
 
 #include <algorithm>
 #include <assert.h>
 
 #define BATCH_TASK_COUNT				32
-#define MIN_VALUES_COMPUTED_PER_TASK	8192
+#define MIN_VALUES_COMPUTED_PER_TASK	4096
 
 CTaskManager::CTaskManager()
 :	m_ToComplete(0)
@@ -21,12 +22,13 @@ CTaskManager::~CTaskManager()
 void	CTaskManager::MultithreadRange(std::function<void(size_t, size_t)> function, size_t domainSize, size_t threadingHint, bool sync)
 {
 	CreateThreadsIFN(false);
-	size_t		taskCount = std::min(threadingHint / MIN_VALUES_COMPUTED_PER_TASK, m_Threads.size() * 2);
+	size_t		taskCount = std::min(threadingHint / MIN_VALUES_COMPUTED_PER_TASK, m_Threads.size() * 8);
 
 	if (sync)
 		WaitForCompletion(true);
 	if (taskCount <= 1)
 	{
+		MICROPROFILE_SCOPEI("CTaskManager", "ExecuteInline", MP_YELLOW4);
 		function(0, domainSize); // Not worth multi-threading
 	}
 	else
@@ -103,10 +105,12 @@ void	CTaskManager::DestroyThreadsIFN()
 		delete m_Threads[i];
 	}
 	m_Threads.clear();
+	m_StopThreads = false;
 }
 
 void	CTaskManager::WaitForCompletion(bool processTasks)
 {
+	MICROPROFILE_SCOPEI("CTaskManager", "WaitForCompletion", MP_YELLOW2);
 	if (processTasks)
 	{
 		std::function<void()>		toExec = nullptr;
@@ -161,6 +165,9 @@ void	CTaskManager::CallOnceJobFinished(std::function<void()> callback)
 
 void	CTaskManager::ConsumerThreadUpdate()
 {
+#if		ENABLE_MICROPROFILE
+	MicroProfileOnThreadCreate("Consumer Thread");
+#endif
 	std::function<void()>	toExecute = nullptr;
 
 	while (!m_StopThreads)
@@ -179,6 +186,7 @@ void	CTaskManager::ConsumerThreadUpdate()
 		}
 		if (!m_Queue.empty())
 		{
+			MICROPROFILE_SCOPEI("CTaskManager", "Pop task", MP_YELLOW);
 			toExecute = m_Queue.front();
 			m_Queue.pop();
 			assert(toExecute != nullptr);
@@ -188,6 +196,7 @@ void	CTaskManager::ConsumerThreadUpdate()
 			m_QueueChanged.wait(queueLock);
 			if (!m_Queue.empty())
 			{
+				MICROPROFILE_SCOPEI("CTaskManager", "Pop task", MP_YELLOW);
 				toExecute = m_Queue.front();
 				m_Queue.pop();
 				assert(toExecute != nullptr);

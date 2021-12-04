@@ -148,22 +148,30 @@
     <ClCompile Include="DumbANN\LayerBase.cpp" />
     <ClCompile Include="DumbANN\LayerConv2D.cpp" />
     <ClCompile Include="DumbANN\LayerDense.cpp" />
+    <ClCompile Include="DumbANN\LayerDropout.cpp" />
     <ClCompile Include="DumbANN\LayerMaxPooling.cpp" />
+    <ClCompile Include="DumbANN\LayerSoftmax.cpp" />
     <ClCompile Include="DumbANN\NeuralNetwork.cpp" />
     <ClCompile Include="DumbANN\NeuronStorages.cpp" />
     <ClCompile Include="DumbANN\TaskManager.cpp" />
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="MicroProfile\microprofile.cpp" />
     <ClCompile Include="UnitTests.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="DumbANN\DumbANNConfig.h" />
     <ClInclude Include="DumbANN\LayerBase.h" />
     <ClInclude Include="DumbANN\LayerConv2D.h" />
     <ClInclude Include="DumbANN\LayerDense.h" />
+    <ClInclude Include="DumbANN\LayerDropout.h" />
     <ClInclude Include="DumbANN\LayerMaxPooling.h" />
+    <ClInclude Include="DumbANN\LayerSoftmax.h" />
     <ClInclude Include="DumbANN\NeuralNetwork.h" />
     <ClInclude Include="DumbANN\NeuronKernel.h" />
     <ClInclude Include="DumbANN\NeuronStorages.h" />
     <ClInclude Include="DumbANN\TaskManager.h" />
+    <ClInclude Include="MicroProfile\microprofile.h" />
+    <ClInclude Include="MicroProfile\microprofile_html.h" />
     <ClInclude Include="UnitTests.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

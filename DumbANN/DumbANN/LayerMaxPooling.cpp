@@ -42,6 +42,7 @@ bool	CLayerMaxPooling2D::Setup(	size_t inputFeatureCount, size_t inputSizeX, siz
 
 void	CLayerMaxPooling2D::FeedForward(const float *input, size_t rangeMin, size_t rangeMax)
 {
+	MICROPROFILE_SCOPEI("CLayerMaxPooling2D", "CLayerMaxPooling2D::FeedForward", MP_GREEN1);
 	SComputeOutput_KernelIn	kernelIn;
 
 	kernelIn.m_FeatureCount = m_FeatureCount;
@@ -55,6 +56,7 @@ void	CLayerMaxPooling2D::FeedForward(const float *input, size_t rangeMin, size_t
 
 void	CLayerMaxPooling2D::BackPropagateError(const float *prevOutput, const std::vector<float> &error, size_t rangeMin, size_t rangeMax)
 {
+	MICROPROFILE_SCOPEI("CLayerMaxPooling2D", "CLayerMaxPooling2D::BackPropagateError", MP_RED1);
 	const size_t	featureStide = m_ConvParams.m_OutputSizeX * m_ConvParams.m_OutputSizeY;
 
 	// Outter layer of the neural network:
@@ -72,11 +74,12 @@ void	CLayerMaxPooling2D::UpdateWeightsAndBias(size_t trainingSteps, size_t range
 
 void	CLayerMaxPooling2D::GatherSlopes(float *dst, const CLayer *prevLayer, size_t rangeMin, size_t rangeMax) const
 {
+	MICROPROFILE_SCOPEI("CLayerMaxPooling2D", "CLayerMaxPooling2D::GatherSlopes", MP_PALEVIOLETRED1);
 	if (prevLayer == nullptr)
 	{
 		assert(false); // CLayerMaxPooling2D cannot be first layer
+		return;
 	}
-
 	const size_t			featureInputStride = m_ConvParams.m_InputSizeX * m_ConvParams.m_InputSizeY;
 	SGatherSlopes_KernelIn	kernelIn;
 
@@ -130,14 +133,14 @@ void	CLayerMaxPooling2D::Kernel_ComputeOutput(	const SComputeOutput_KernelIn &in
 								inY * conv.m_InputSizeX +
 								inX;
 			maxValue = std::max(maxValue, input.m_Input[inputIdx]);
-			assert(abs(maxValue) < 100000000.0f);
+			assert(abs(maxValue) < 1000000.0f);
 		}
 	}
 	const size_t	outIdx =	range.m_FeatureIdx * featureOutputStride +
 								range.m_ConvIdxY * conv.m_OutputSizeX +
 								range.m_ConvIdxX;
 	input.m_Output[outIdx] = maxValue;
-	assert(abs(input.m_Output[outIdx]) < 100000000.0f);
+	assert(abs(input.m_Output[outIdx]) < 1000000.0f);
 }
 
 void	CLayerMaxPooling2D::Kernel_GatherSlopes(const SGatherSlopes_KernelIn &input,
@@ -168,6 +171,6 @@ void	CLayerMaxPooling2D::Kernel_GatherSlopes(const SGatherSlopes_KernelIn &input
 								range.m_ConvIdxY * conv.m_OutputSizeX +
 								range.m_ConvIdxX;
 	input.m_Output[maxIdx] = input.m_Slopes[outIdx];
-	assert(abs(input.m_Output[maxIdx]) < 100000000.0f);
+	assert(abs(input.m_Output[maxIdx]) < 1000000.0f);
 }
 

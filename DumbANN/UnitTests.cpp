@@ -5,9 +5,27 @@
 #include "DumbANN/LayerDense.h"
 #include "DumbANN/LayerConv2D.h"
 #include "DumbANN/LayerMaxPooling.h"
+#include "DumbANN/LayerDropout.h"
+#include "DumbANN/LayerSoftmax.h"
 
 #include <stdlib.h>
 #include <time.h>
+
+void	PrintData2D(const float *data, size_t sizeX, size_t sizeY, bool image)
+{
+	for (size_t y = 0; y < sizeY; ++y)
+	{
+		for (size_t x = 0; x < sizeX; ++x)
+		{
+			float	value = data[y * sizeX + x];
+			if (image)
+				printf("%s", value > 0.5f ? "[X]" : "[ ]");
+			else
+				printf("%s%s%.3f", x != 0 ? "," : "", value < 0 ? "" : " ", value);
+		}
+		printf("\n");
+	}
+}
 
 struct	SMnistLabelHeader
 {
@@ -111,19 +129,22 @@ void	LoadDataSet(std::vector<float> &images,
 	images.resize(imageData.size());
 	labels.resize(labelData.size());
 
+	const float		offset = 0.0001f;
+	const float		multiplier = 1.0f - (offset * 2.0f);
+
 	for (size_t i = 0; i < imageData.size(); ++i)
-		images[i] = static_cast<float>(imageData[i]) / 255.0f;
+		images[i] = RemapValue(static_cast<float>(imageData[i]) / 255.0f, 0, 1, 0.9, 0.1);
 	labels = labelData;
 }
 
 void	TrainNetwork(CNeuralNetwork &ann, const std::vector<float> &images, const std::vector<uint8_t> &labels)
 {
 	const int			inputSize = images.size() / labels.size();
-	const size_t		epochCount = 5;
-	const size_t		miniBatchCount = 5;
+	const size_t		epochCount = 1;
+	const size_t		miniBatchCount = 2;
 	const size_t		batchCount = labels.size() / miniBatchCount;
 	std::vector<float>	expectedOutput(10);
-	const size_t		printFrequency = 100;
+	const size_t		printFrequency = 10;
 
 	for (size_t epoch = 0; epoch < epochCount; ++epoch)
 	{
@@ -151,7 +172,7 @@ void	TrainNetwork(CNeuralNetwork &ann, const std::vector<float> &images, const s
 				errorEpoch += currentError;
 				errorBatch += currentError;
 				// Backpropagation:
-				ann.BackPropagateError(inputPtr, expectedOutput);
+				ann.BackPropagateError(inputPtr, expectedOutput.data());
 			}
 			ann.UpdateWeightAndBiases();
 			if ((batchIdx + 1) % printFrequency == 0)
@@ -231,17 +252,71 @@ float	TestNetwork(CNeuralNetwork &ann, const std::vector<float> &images, const s
 	return finalError;
 }
 
+void	TrainAutoEncoder(CNeuralNetwork &ann, const std::vector<float> &images, size_t labelCount)
+{
+	const int			inputSize = images.size() / labelCount;
+	float				errorBatch = 0.0f;
+	const size_t		printFrequency = 10;
+	const size_t		batchCount = 20;
+	const float			*prevImagePtr = nullptr;
+	float				inVariance = 0.0f;
+	float				outVariance = 0.0f;
+	std::vector<float>	prevOutput;
+
+	prevOutput.resize(inputSize);
+	for (size_t batchIdx = 0; batchIdx < batchCount; ++batchIdx)
+	{
+		int			randImgIdx = rand() % labelCount;
+		const float	*inputPtr = images.data() + (ptrdiff_t)randImgIdx * inputSize;
+
+		// Feedforward:
+		ann.FeedForward(inputPtr);
+		// Compute error:
+		for (size_t j = 0; j < inputSize; ++j)
+			errorBatch += abs(inputPtr[j] - ann.GetOutput().Data()[j]);
+		// Compute variance:
+		if (prevImagePtr != nullptr)
+		{
+			for (size_t j = 0; j < inputSize; ++j)
+				inVariance += abs(prevImagePtr[j] - inputPtr[j]);
+			for (size_t j = 0; j < inputSize; ++j)
+				outVariance += abs(prevOutput[j] - ann.GetOutput().Data()[j]);
+			memcpy(prevOutput.data(), ann.GetOutput().Data(), inputSize * sizeof(float));
+		}
+		prevImagePtr = inputPtr;
+		// Backpropagation:
+		ann.BackPropagateError(inputPtr, inputPtr);
+		ann.UpdateWeightAndBiases();
+		if ((batchIdx + 1) % printFrequency == 0)
+		{
+			printf(	"Error for batch %u/%u is:\t%.4f\t[vIn: %.4f\tVout: %.4f]\n",
+					(int)batchIdx + 1,
+					(int)batchCount,
+					errorBatch / (float)(printFrequency),
+					inVariance / (float)(printFrequency),
+					outVariance / (float)(printFrequency));
+			errorBatch = 0.0f;
+			inVariance = 0.0f;
+			outVariance = 0.0f;
+		}
+		if ((batchIdx + 1) % (printFrequency * 100) == 0 ||
+			batchIdx + 4 >= batchCount)
+		{
+			printf("\n");
+			PrintData2D(inputPtr, 28, 28, false);
+			printf("\n");
+			PrintData2D(ann.GetOutput().Data(), 28, 28, false);
+			printf("\n");
+		}
+	}
+}
+
 float	TestMNIST()
 {
 	srand(42);
 
 	printf("--------------------------------\n");
 	printf("MNIST Test\n");
-	printf("4 Layers:\n");
-	printf("\tCLayerDense 28x28->28x28\n");
-	printf("\tCLayerDense 28x28->128\n");
-	printf("\tCLayerDense 128->64\n");
-	printf("\tCLayerDense 64->10\n");
 
 	std::vector<float>		images;
 	std::vector<uint8_t>	labels;
@@ -253,142 +328,86 @@ float	TestMNIST()
 
 	const size_t		inputSize = images.size() / labels.size();
 	const size_t		outputSize = 10;
+
+	CNeuralNetwork		autoEncoder;
 	CNeuralNetwork		ann;
+
 	CLayerDense			layers[3];
 	CLayerMaxPooling2D	poolLayers[2];
 	CLayerConv2D		convLayers[3];
+	CLayerDropOut		dropout;
+	CLayerSoftMax		softmax;
 
-	// LeNet test:
-	// Convolution 6x5x5 2 padding:
+	// Convolution
 	convLayers[0].Setup(1, 28, 28,
-						6, 5, 5,
-						2, 1);
+						32, 3, 3,
+						1, 1);
 	convLayers[0].SetActivation(EActivation::Relu);
 	convLayers[0].SetInitialization(ERandInitializer::RandHe);
-
-	// Max pooling	6x2x2:
-	poolLayers[0].Setup(convLayers[0].GetFeatureCount(),
+	// Convolution
+	convLayers[1].Setup(convLayers[0].GetFeatureCount(),
 						convLayers[0].GetOutputSizeX(),
 						convLayers[0].GetOutputSizeY(),
-						2, 2,
-						0, 2);
-	// Convolution
-	convLayers[1].Setup(poolLayers[0].GetFeatureCount(),
-						poolLayers[0].GetOutputSizeX(),
-						poolLayers[0].GetOutputSizeY(),
-						16, 5, 5,
+						64, 3, 3,
 						0, 1);
 	convLayers[1].SetActivation(EActivation::Relu);
 	convLayers[1].SetInitialization(ERandInitializer::RandHe);
-
-	// Max pooling	16x2x2:
-	poolLayers[1].Setup(convLayers[1].GetFeatureCount(),
+	// Dropout
+	dropout.Setup(convLayers[1].GetOutputSize(), 0.25f);
+	// Max pooling	2x2:
+	poolLayers[0].Setup(convLayers[1].GetFeatureCount(),
 						convLayers[1].GetOutputSizeX(),
 						convLayers[1].GetOutputSizeY(),
 						2, 2,
 						0, 2);
-
 	// Flatten:
-	convLayers[2].Setup(poolLayers[1].GetFeatureCount(),
-						poolLayers[1].GetOutputSizeX(),
-						poolLayers[1].GetOutputSizeY(),
+	convLayers[2].Setup(poolLayers[0].GetFeatureCount(),
+						poolLayers[0].GetOutputSizeX(),
+						poolLayers[0].GetOutputSizeY(),
 						1, 1, 1,
 						0, 1);
-	convLayers[2].SetActivation(EActivation::Linear);
+	convLayers[2].SetActivation(EActivation::Sigmoid);
 	convLayers[2].SetInitialization(ERandInitializer::RandXavier);
-
 	// Dense:
-	layers[0].Setup(convLayers[2].GetFeatureCount() * convLayers[2].GetOutputSizeX() * convLayers[2].GetOutputSizeY(), 120);
+	layers[0].Setup(convLayers[2].GetOutputSize(), 10);
 	layers[0].SetActivation(EActivation::Sigmoid);
-	layers[0].SetInitialization(ERandInitializer::RandXavierNormalized);
-
-	layers[1].Setup(layers[0].GetOutputSize(), 84);
-	layers[1].SetActivation(EActivation::Sigmoid);
-	layers[1].SetInitialization(ERandInitializer::RandXavierNormalized);
-
-	layers[2].Setup(layers[1].GetOutputSize(), 10);
-	layers[2].SetActivation(EActivation::Sigmoid);
-	layers[2].SetInitialization(ERandInitializer::RandXavierNormalized);
+	layers[0].SetInitialization(ERandInitializer::RandXavier);
+	// Softmax:
+	softmax.Setup(10);
 
 	ann.AddLayer(&convLayers[0]);
-	ann.AddLayer(&poolLayers[0]);
 	ann.AddLayer(&convLayers[1]);
-	ann.AddLayer(&poolLayers[1]);
+	// ann.AddLayer(&dropout);
+	ann.AddLayer(&poolLayers[0]);
 	ann.AddLayer(&convLayers[2]);
 	ann.AddLayer(&layers[0]);
-	ann.AddLayer(&layers[1]);
-	ann.AddLayer(&layers[2]);
+	ann.AddLayer(&softmax);
 
-	// Output layer is linear to better backpropagate error during training:
-//	layers[0].Setup(inputSize, inputSize, EActivation::Relu, ERandInitializer::RandHe, EOptimization::SGD);
-//	layers[1].Setup(inputSize, 128, EActivation::Relu, ERandInitializer::RandHe, EOptimization::SGD);
-//	layers[2].Setup(128, 64, EActivation::Relu, ERandInitializer::RandHe, EOptimization::SGD);
-//	layers[3].Setup(64, outputSize, EActivation::Relu, ERandInitializer::RandHe, EOptimization::SGD);
+	// Auto-encoder:
+	layers[1].Setup(convLayers[2].GetOutputSize(), (28 * 28) / 2);
+	layers[1].SetActivation(EActivation::Sigmoid);
+	layers[1].SetInitialization(ERandInitializer::RandXavier);
 
-//	ann.AddLayer(&layers[0]);
-//	ann.AddLayer(&layers[1]);
-//	ann.AddLayer(&layers[2]);
-//	ann.AddLayer(&layers[3]);
+	layers[2].Setup(layers[1].GetOutputSize(), 28 * 28);
+	layers[2].SetActivation(EActivation::Sigmoid);
+	layers[2].SetInitialization(ERandInitializer::RandXavier);
+	
+	autoEncoder.AddLayer(&convLayers[0]);
+	autoEncoder.AddLayer(&convLayers[1]);
+	autoEncoder.AddLayer(&dropout);
+	autoEncoder.AddLayer(&poolLayers[0]);
+	autoEncoder.AddLayer(&convLayers[2]);
+	autoEncoder.AddLayer(&layers[1]);
+	autoEncoder.AddLayer(&layers[2]);
 
+	autoEncoder.PrintDetails();
+	TrainAutoEncoder(autoEncoder, images, labels.size());
+	autoEncoder.DestroyThreadsIFN();
+	return 0.0f;
+
+	ann.PrintDetails();
 	TrainNetwork(ann, images, labels);
 
-	printf("Conv Weights:\n");
-	for (size_t featureIdx = 0; featureIdx < convLayers[0].GetFeatureCount(); ++featureIdx)
-	{
-		float	*feature = convLayers[0].GetWeights().View().GetRow(featureIdx);
-		for (size_t y = 0; y < convLayers[0].GetFeatureSizeY(); ++y)
-		{
-			for (size_t x = 0; x < convLayers[0].GetFeatureSizeX(); ++x)
-			{
-				if (x != 0)
-					printf(",");
-				printf("%f", feature[y * convLayers[0].GetFeatureSizeX() + x]);
-			}
-			printf("\n");
-		}
-		printf("\n");
-		printf("\n");
-	}
-	printf("\n");
-	printf("Conv Out:\n");
-	for (size_t featureIdx = 0; featureIdx < convLayers[0].GetFeatureCount(); ++featureIdx)
-	{
-		size_t	outStride = convLayers[0].GetOutputSizeX() * convLayers[0].GetOutputSizeY();
-		float	*feature = convLayers[0].GetOutput().Data() + featureIdx * outStride;
-		for (size_t y = 0; y < convLayers[0].GetOutputSizeY(); ++y)
-		{
-			for (size_t x = 0; x < convLayers[0].GetOutputSizeX(); ++x)
-			{
-				if (x != 0)
-					printf(",");
-				printf("%f", feature[y * convLayers[0].GetOutputSizeX() + x]);
-			}
-			printf("\n");
-		}
-		printf("\n");
-		printf("\n");
-	}
-	printf("\n");
-
-	printf("Pool Out:\n");
-	for (size_t featureIdx = 0; featureIdx < poolLayers[0].GetFeatureCount(); ++featureIdx)
-	{
-		size_t	outStride = poolLayers[0].GetOutputSizeX() * poolLayers[0].GetOutputSizeY();
-		float	*feature = poolLayers[0].GetOutput().Data() + featureIdx * outStride;
-		for (size_t y = 0; y < poolLayers[0].GetOutputSizeY(); ++y)
-		{
-			for (size_t x = 0; x < poolLayers[0].GetOutputSizeX(); ++x)
-			{
-				if (x != 0)
-					printf(",");
-				printf("%f", feature[y * poolLayers[0].GetOutputSizeX() + x]);
-			}
-			printf("\n");
-		}
-		printf("\n");
-		printf("\n");
-	}
-	printf("\n");
 	images.clear();
 	labels.clear();
 
@@ -405,9 +424,6 @@ float	TestXOR()
 
 	printf("--------------------------------\n");
 	printf("XOR Test\n");
-	printf("2 Layers:\n");
-	printf("\tCLayerDense 2->2\n");
-	printf("\tCLayerDense 2->1\n");
 
 	CLayerDense		layers[2];
 
@@ -418,6 +434,8 @@ float	TestXOR()
 
 	ann.AddLayer(&layers[0]);
 	ann.AddLayer(&layers[1]);
+
+	ann.PrintDetails();
 
 	const size_t		trainingCount = 100000;
 	float				input[2];
@@ -432,7 +450,7 @@ float	TestXOR()
 		input[1] = rand1 == 0 ? 0.0f : 1.0f;
 		expectedOutput[0] = (rand0 ^ rand1) == 0 ? 0.0f : 1.0f;
 		ann.FeedForward(input);
-		ann.BackPropagateError(input, expectedOutput);
+		ann.BackPropagateError(input, expectedOutput.data());
 		ann.UpdateWeightAndBiases();
 		const float		curError = abs(ann.GetOutput().Data()[0] - expectedOutput[0]);
 		printf("training %u/%u error is %f\r", (int)i + 1, (int)trainingCount, curError);
@@ -463,11 +481,6 @@ float	TestCosine()
 
 	printf("--------------------------------\n");
 	printf("Cosine Test\n");
-	printf("4 Layers:\n");
-	printf("\tCLayerDense 1->8\n");
-	printf("\tCLayerDense 8->32\n");
-	printf("\tCLayerDense 32->16\n");
-	printf("\tCLayerDense 16->1\n");
 
 	CLayerDense		layers[4];
 
@@ -475,6 +488,7 @@ float	TestCosine()
 	layers[1].Setup(16, 32);
 	layers[2].Setup(32, 16);
 	layers[3].Setup(16, 1);
+	layers[3].SetActivation(EActivation::Linear);
 
 	CNeuralNetwork	ann;
 
@@ -482,6 +496,8 @@ float	TestCosine()
 	ann.AddLayer(&layers[1]);
 	ann.AddLayer(&layers[2]);
 	ann.AddLayer(&layers[3]);
+
+	ann.PrintDetails();
 
 	const size_t		trainingCount = 1000000;
 	std::vector<float>	expectedOutput;
@@ -492,7 +508,7 @@ float	TestCosine()
 		float	randX = (float)rand() / (float)RAND_MAX * 3.1415 * 5;
 		expectedOutput[0] = cos(randX);
 		ann.FeedForward(&randX);
-		ann.BackPropagateError(&randX, expectedOutput);
+		ann.BackPropagateError(&randX, expectedOutput.data());
 		ann.UpdateWeightAndBiases();
 		const float		curError = abs(ann.GetOutput().Data()[0] - expectedOutput[0]);
 		if ((i + 1) % 100 == 0)
@@ -511,5 +527,131 @@ float	TestCosine()
 	}
 	printf("\nCosine test error is %f\n", testError / (float)testCount);
 	printf("--------------------------------\n");
+	return 0.0f;
+}
+
+float	TestConvolution(bool addPool)
+{
+//	srand(3454);
+
+	printf("--------------------------------\n");
+	printf("Convolution Test %s\n", addPool ? "(with pool)" : "");
+
+	const size_t	testInputSizeX = 13;
+	const size_t	testInputSizeY = 13;
+	CLayerConv2D		conv;
+	CLayerMaxPooling2D	pool;
+
+	conv.Setup(	1, testInputSizeX, testInputSizeY,
+				2, 2, 2,
+				0, 1);
+	conv.SetActivation(EActivation::Sigmoid);
+	conv.SetInitialization(ERandInitializer::RandXavier);
+
+	if (addPool)
+	{
+		pool.Setup(	2, conv.GetOutputSizeX(), conv.GetOutputSizeY(),
+					2, 2,
+					0, 2);
+	}
+
+	CNeuralNetwork	ann;
+
+	ann.AddLayer(&conv);
+	if (addPool)
+		ann.AddLayer(&pool);
+
+	ann.PrintDetails();
+
+	const size_t	testOutputSizeX = addPool ? pool.GetOutputSizeX() : conv.GetOutputSizeX();
+	const size_t	testOutputSizeY = addPool ? pool.GetOutputSizeY() : conv.GetOutputSizeY();
+	const size_t	testOutputStride = testOutputSizeX * testOutputSizeY;
+
+	std::vector<float>	testInput;
+	std::vector<float>	expectedOutput;
+
+	testInput.resize(testInputSizeX * testInputSizeY);
+	expectedOutput.resize(2 * testOutputStride);
+	float	error = 0.0f;
+	// Train the convolution to recognize 2 patterns, slash and backslash:
+	// X0 AND 0X
+	// 0X     X0
+	for (size_t trainIdx = 0; trainIdx < 10000000; ++trainIdx)
+	{
+		size_t	randSlash = rand() % 10;
+		size_t	randBackslash = rand() % 10;
+
+		for (size_t i = 0; i < testInput.size(); ++i)
+			testInput[i] = 0.0f;
+		for (size_t i = 0; i < expectedOutput.size(); ++i)
+			expectedOutput[i] = 0.0f;
+		for (size_t i = 0; i < randSlash; ++i)
+		{
+			// Generate a rand pos for the slash:
+			size_t	randX = (rand() % (testInputSizeX - 2)) & (~3);
+			size_t	randY = (rand() % (testInputSizeY - 2)) & (~3);
+			size_t	outX = addPool ? randX / 2 : randX;
+			size_t	outY = addPool ? randY / 2 : randY;
+			// 'Slash' pattern
+			testInput[randY * testInputSizeX + randX] = 0.0f;
+			testInput[randY * testInputSizeX + randX + 1] = 1.0f;
+			testInput[(randY + 1) * testInputSizeX + randX] = 1.0f;
+			testInput[(randY + 1) * testInputSizeX + randX + 1] = 0.0f;
+			// Expected output:
+			expectedOutput[outY * testOutputSizeX + outX] = 1.0f;
+		}
+		for (size_t i = 0; i < randBackslash; ++i)
+		{
+			// Generate a rand pos for the backslash:
+			size_t	randX = (rand() % (testInputSizeX - 2)) & (~3);
+			size_t	randY = (rand() % (testInputSizeY - 2)) & (~3);
+			size_t	outX = addPool ? randX / 2 : randX;
+			size_t	outY = addPool ? randY / 2 : randY;
+			if (expectedOutput[outY * testOutputSizeX + outX] != 0.0f)
+				continue; // Do not override previous slash
+			// 'Backslash' pattern
+			testInput[randY * testInputSizeX + randX] = 1.0f;
+			testInput[randY * testInputSizeX + randX + 1] = 0.0f;
+			testInput[(randY + 1) * testInputSizeX + randX] = 0.0f;
+			testInput[(randY + 1) * testInputSizeX + randX + 1] = 1.0f;
+			// Expected output:
+			expectedOutput[testOutputStride + outY * testOutputSizeX + outX] = 1.0f;
+		}
+
+
+		ann.FeedForward(testInput.data());
+		ann.BackPropagateError(testInput.data(), expectedOutput.data());
+
+		for (size_t i = 0; i < expectedOutput.size(); ++i)
+		{
+			error += abs(ann.GetOutput().Data()[i] - expectedOutput[i]);
+		}
+		ann.UpdateWeightAndBiases();
+
+		if (trainIdx == 0)
+		{
+			printf("First error is %f\n", error);
+		}
+		else if ((trainIdx + 1) % 10000 == 0)
+		{
+			printf("Error is %f\r", error / 100000.0f);
+			error = 0.0f;
+		}
+	}
+	printf("\ninput:\n");
+	PrintData2D(testInput.data(), testInputSizeX, testInputSizeY, true);
+	printf("\ncnn output feature 1:\n");
+	PrintData2D(conv.GetOutput().Data(), conv.GetOutputSizeX(), conv.GetOutputSizeY(), false);
+	printf("\ncnn output feature 2:\n");
+	PrintData2D(conv.GetOutput().Data() + conv.GetOutputSizeX() * conv.GetOutputSizeY(), conv.GetOutputSizeX(), conv.GetOutputSizeY(), false);
+	printf("\nexpected output 1:\n");
+	PrintData2D(expectedOutput.data(), testOutputSizeX, testOutputSizeY, true);
+	printf("\nexpected output 2:\n");
+	PrintData2D(expectedOutput.data() + testOutputStride, testOutputSizeX, testOutputSizeY, true);
+	printf("\npool output feature 1:\n");
+	PrintData2D(ann.GetOutput().Data(), testOutputSizeX, testOutputSizeY, true);
+	printf("\npool output feature 2:\n");
+	PrintData2D(ann.GetOutput().Data() + testOutputStride, testOutputSizeX, testOutputSizeY, true);
+	printf("\n");
 	return 0.0f;
 }

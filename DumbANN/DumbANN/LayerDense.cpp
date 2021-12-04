@@ -51,6 +51,7 @@ bool	CLayerDense::Setup(size_t inputSize, size_t outputSize)
 
 void	CLayerDense::FeedForward(const float *input, size_t rangeMin, size_t rangeMax)
 {
+	MICROPROFILE_SCOPEI("CLayerDense", "CLayerDense::FeedForward", MP_GREEN1);
 	assert(rangeMin >= 0 && rangeMin < m_Output.Size() && rangeMin < rangeMax);
 	assert(rangeMax >= 0 && rangeMax <= m_Output.Size());
 	const size_t			outputRange = rangeMax - rangeMin;
@@ -67,6 +68,7 @@ void	CLayerDense::FeedForward(const float *input, size_t rangeMin, size_t rangeM
 
 void	CLayerDense::BackPropagateError(const float *prevOutput, const std::vector<float> &error, size_t rangeMin, size_t rangeMax)
 {
+	MICROPROFILE_SCOPEI("CLayerDense", "CLayerDense::BackPropagateError", MP_RED1);
 	assert(rangeMin >= 0 && rangeMin < m_Output.Size() && rangeMin < rangeMax);
 	assert(rangeMax >= 0 && rangeMax <= m_Output.Size());
 	const size_t	outputRange = rangeMax - rangeMin;
@@ -93,6 +95,7 @@ void	CLayerDense::BackPropagateError(const float *prevOutput, const std::vector<
 
 void	CLayerDense::BackPropagateError(const float *prevOutput, const CLayer *nextLayer, size_t rangeMin, size_t rangeMax)
 {
+	MICROPROFILE_SCOPEI("CLayerDense", "CLayerDense::BackPropagateError", MP_RED1);
 	assert(rangeMin >= 0 && rangeMin < m_Output.Size() && rangeMin < rangeMax);
 	assert(rangeMax >= 0 && rangeMax <= m_Output.Size());
 	const size_t			outputRange = rangeMax - rangeMin;
@@ -114,6 +117,7 @@ void	CLayerDense::BackPropagateError(const float *prevOutput, const CLayer *next
 
 void	CLayerDense::UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, size_t rangeMax)
 {
+	MICROPROFILE_SCOPEI("CLayerDense", "CLayerDense::UpdateWeightsAndBias", MP_BLUE1);
 	assert(rangeMin >= 0 && rangeMin < m_Output.Size() && rangeMin < rangeMax);
 	assert(rangeMax >= 0 && rangeMax <= m_Output.Size());
 	const size_t		outputRange = rangeMax - rangeMin;
@@ -128,6 +132,7 @@ void	CLayerDense::UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, si
 
 void	CLayerDense::GatherSlopes(float *dst, const CLayer *prevLayer, size_t rangeMin, size_t rangeMax) const
 {
+	MICROPROFILE_SCOPEI("CLayerDense", "CLayerDense::GatherSlopes", MP_PALEVIOLETRED1);
 	(void)prevLayer;
 	SConstNeuronMatrixView	weightMat(m_Weights.View());
 	weightMat.m_Data += rangeMin;

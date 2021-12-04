@@ -1,7 +1,10 @@
 #pragma once
 
+#include "DumbANNConfig.h"
 #include "NeuronStorages.h"
 #include <vector>
+
+float	RemapValue(float value, float oldMin, float oldMax, float newMin, float newMax);
 
 enum class	EActivation
 {

@@ -17,7 +17,7 @@ public:
 
 	bool	AddLayer(CLayer *layer);
 	bool	FeedForward(const float *input);
-	bool	BackPropagateError(const float *input, const std::vector<float> &expected);
+	bool	BackPropagateError(const float *input, const float *expected);
 	bool	UpdateWeightAndBiases();
 
 	const CNeuronVector		&GetOutput() const { return m_Layers.back()->GetOutput(); }

@@ -84,6 +84,7 @@ bool	CLayerConv2D::Setup(size_t inputFeatureCount, size_t inputSizeX, size_t inp
 
 void	CLayerConv2D::FeedForward(const float *input, size_t rangeMin, size_t rangeMax)
 {
+	MICROPROFILE_SCOPEI("CLayerConv2D", "CLayerConv2D::FeedForward", MP_GREEN1);
 	SComputeNetInput_KernelIn	kernelIn;
 
 	kernelIn.m_Bias = m_Bias.Data();
@@ -103,6 +104,7 @@ void	CLayerConv2D::FeedForward(const float *input, size_t rangeMin, size_t range
 
 void	CLayerConv2D::BackPropagateError(const float *prevOutput, const std::vector<float> &error, size_t rangeMin, size_t rangeMax)
 {
+	MICROPROFILE_SCOPEI("CLayerConv2D", "CLayerConv2D::BackPropagateError", MP_RED1);
 	const size_t	featureStride = m_ConvParams.m_OutputSizeX * m_ConvParams.m_OutputSizeY;
 	const size_t	outputRange = (rangeMax - rangeMin) * featureStride;
 	float			*netInputPtr = m_NetInput.Data();
@@ -127,6 +129,7 @@ void	CLayerConv2D::BackPropagateError(const float *prevOutput, const std::vector
 
 void	CLayerConv2D::BackPropagateError(const float *prevOutput, const CLayer* nextLayer, size_t rangeMin, size_t rangeMax)
 {
+	MICROPROFILE_SCOPEI("CLayerConv2D", "CLayerConv2D::BackPropagateError", MP_RED1);
 	const size_t	featureStride = m_ConvParams.m_OutputSizeX * m_ConvParams.m_OutputSizeY;
 	const size_t	outputRange = (rangeMax - rangeMin) * featureStride;
 	float			*netInputPtr = m_NetInput.Data();
@@ -149,6 +152,7 @@ void	CLayerConv2D::BackPropagateError(const float *prevOutput, const CLayer* nex
 
 void	CLayerConv2D::UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, size_t rangeMax)
 {
+	MICROPROFILE_SCOPEI("CLayerConv2D", "CLayerConv2D::UpdateWeightsAndBias", MP_BLUE1);
 	const size_t	outputRange = rangeMax - rangeMin;
 	float			*slopeAccumPtr = m_SlopesOutAccum.Data();
 	float			*biasesPtr = m_Bias.Data();
@@ -165,6 +169,7 @@ void	CLayerConv2D::UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, s
 
 void	CLayerConv2D::GatherSlopes(float *dst, const CLayer *prevLayer, size_t rangeMin, size_t rangeMax) const
 {
+	MICROPROFILE_SCOPEI("CLayerConv2D", "CLayerConv2D::GatherSlopes", MP_PALEVIOLETRED1);
 	(void)prevLayer;
 	const size_t	featureInputStride = m_ConvParams.m_InputSizeX * m_ConvParams.m_InputSizeY;
 	const size_t	dstRange = rangeMax - rangeMin;
@@ -201,7 +206,7 @@ void	CLayerConv2D::PrintInfo() const
 
 size_t	CLayerConv2D::GetThreadingHint() const
 {
-	return GetOutputSizeX() * GetOutputSizeY() * m_KernelCount;
+	return GetOutputSizeX() * GetOutputSizeY() * m_KernelCount * 4096;
 }
 
 size_t	CLayerConv2D::GetDomainSize() const
@@ -225,8 +230,9 @@ void	CLayerConv2D::Kernel_AccumWeightsAndBiasDerivative(	const SAccumWeightsAndB
 								range.m_ConvIdxX;
 	const float		slope = input.m_Slopes[outIdx];
 
+	assert(abs(slope) < 1000000.0f);
 	input.m_AccumBias[outIdx] += slope;
-	assert(abs(input.m_AccumBias[outIdx]) < 100000000.0f);
+	assert(abs(input.m_AccumBias[outIdx]) < 1000000.0f);
 	// For each input feature:
 	for (size_t inFeatureIdx = 0; inFeatureIdx < input.m_InFeatureCount; ++inFeatureIdx)
 	{
@@ -241,7 +247,7 @@ void	CLayerConv2D::Kernel_AccumWeightsAndBiasDerivative(	const SAccumWeightsAndB
 									(inY - range.m_ConvOffsetY) * conv.m_KernelSizeX +
 									(inX - range.m_ConvOffsetX);
 				weightsAccumPtr[weightIdx] += input.m_Input[inputIdx] * slope;
-				assert(abs(weightsAccumPtr[weightIdx]) < 100000000.0f);
+				assert(abs(weightsAccumPtr[weightIdx]) < 1000000.0f);
 			}
 		}
 	}
@@ -271,7 +277,7 @@ void	CLayerConv2D::Kernel_ComputeNetInput(	const SComputeNetInput_KernelIn &inpu
 									(inY - range.m_ConvOffsetY) * conv.m_KernelSizeX +
 									(inX - range.m_ConvOffsetX);
 				accum += input.m_Input[inputIdx] * weightsPtr[weightIdx];
-				assert(abs(accum) < 100000000.0f);
+				assert(abs(accum) < 1000000.0f);
 			}
 		}
 	}
@@ -280,7 +286,7 @@ void	CLayerConv2D::Kernel_ComputeNetInput(	const SComputeNetInput_KernelIn &inpu
 								range.m_ConvIdxX;
 	accum += input.m_Bias[outIdx];
 	input.m_NetInput[outIdx] = accum;
-	assert(abs(input.m_NetInput[outIdx]) < 100000000.0f);
+	assert(abs(input.m_NetInput[outIdx]) < 1000000.0f);
 }
 
 void	CLayerConv2D::Kernel_GatherSlopes(	const SGatherSlopes_KernelIn &input,

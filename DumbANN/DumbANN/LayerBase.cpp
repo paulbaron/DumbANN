@@ -3,6 +3,12 @@
 #include <xmmintrin.h>
 #include <assert.h>
 
+float	RemapValue(float value, float oldMin, float oldMax, float newMin, float newMax)
+{
+	const float		normalizedVaue = (value - oldMin) / (oldMax - oldMin);
+	return normalizedVaue * (newMax - newMin) + newMin;
+}
+
 const char	*kActivationNames[]
 {
 	"Relu",
@@ -40,7 +46,7 @@ CLayer::CLayer()
 ,	m_Initializer(ERandInitializer::RandXavier)
 ,	m_Regularizer(ERegularizer::None)
 ,	m_RegularizerRatio(1e-5)
-,	m_LearningRate(0.1f)
+,	m_LearningRate(0.001f)
 ,	m_Inertia(0.0f)
 {
 }

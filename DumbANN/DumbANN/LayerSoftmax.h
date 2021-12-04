@@ -3,13 +3,13 @@
 #include "LayerBase.h"
 #include "NeuronKernel.h"
 
-class	CLayerDropOut : public CLayer
+class	CLayerSoftMax : public CLayer
 {
 public:
-	CLayerDropOut();
-	~CLayerDropOut();
+	CLayerSoftMax();
+	~CLayerSoftMax();
 
-	bool	Setup(size_t inputSize, float rate);
+	bool	Setup(size_t inputSize);
 
 	virtual void	FeedForward(const float *input, size_t rangeMin, size_t rangeMax) override;
 	virtual void	BackPropagateError(const float *prevOutput, const std::vector<float> &error, size_t rangeMin, size_t rangeMax) override;
@@ -22,8 +22,5 @@ public:
 	virtual size_t	GetDomainSize() const override;
 
 private:
-	void		UpdateDisabledArray();
-
-	float				m_Rate;
-	std::vector<size_t>	m_DisabledIdx;
+	float	m_CurrentSum;
 };

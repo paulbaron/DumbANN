@@ -21,6 +21,7 @@ bool	CNeuralNetwork::AddLayer(CLayer *layer)
 {
 	if (!m_Layers.empty())
 	{
+		assert(m_Layers.back()->GetOutputSize() == layer->GetInputSize());
 		if (m_Layers.back()->GetOutputSize() != layer->GetInputSize())
 			return false;
 	}
@@ -30,6 +31,7 @@ bool	CNeuralNetwork::AddLayer(CLayer *layer)
 
 bool	CNeuralNetwork::FeedForward(const float *input)
 {
+	MICROPROFILE_SCOPEI("CNeuralNetwork", "FeedForward", MP_GREEN3);
 	if (!m_Layers.empty())
 	{
 		for (size_t i = 0; i < m_Layers.size(); ++i)
@@ -47,16 +49,16 @@ bool	CNeuralNetwork::FeedForward(const float *input)
 	return true;
 }
 
-bool	CNeuralNetwork::BackPropagateError(const float *input, const std::vector<float> &expected)
+bool	CNeuralNetwork::BackPropagateError(const float *input, const float *expected)
 {
+	MICROPROFILE_SCOPEI("CNeuralNetwork", "BackPropagateError", MP_RED3);
 	if (!m_Layers.empty())
 	{
-		assert(m_Layers.back()->GetOutputSize() == expected.size());
-
 		std::vector<float>			error;
+		size_t						outSize = m_Layers.back()->GetOutputSize();
 		const float					*output = m_Layers.back()->GetOutput().Data();
 
-		error.resize(expected.size());
+		error.resize(outSize);
 		for (int i = 0; i < error.size(); ++i)
 			error[i] = expected[i] - output[i];
 
@@ -85,9 +87,10 @@ bool	CNeuralNetwork::BackPropagateError(const float *input, const std::vector<fl
 										prevLayer,
 										minRange, maxRange);
 				};
+				// Can be expensive, ThreadHint * 8 to split in more tasks:
 				m_TaskManager.MultithreadRange(	gatherSlopes,
 												prevLayer->GetSlopesOut().Size(),
-												prevLayer->GetSlopesOut().Size());
+												prevLayer->GetSlopesOut().Size() * 8);
 			}
 		}
 	}
@@ -97,6 +100,7 @@ bool	CNeuralNetwork::BackPropagateError(const float *input, const std::vector<fl
 
 bool	CNeuralNetwork::UpdateWeightAndBiases()
 {
+	MICROPROFILE_SCOPEI("CNeuralNetwork", "UpdateWeightAndBiases", MP_BLUE3);
 	for (int i = 0; i < m_Layers.size(); ++i)
 	{
 		CLayer	*layer = m_Layers[i];

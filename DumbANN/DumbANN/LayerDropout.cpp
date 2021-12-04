@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 CLayerDropOut::CLayerDropOut()
+:	m_Rate(0.0f)
 {
 }
 
@@ -13,42 +14,27 @@ CLayerDropOut::~CLayerDropOut()
 
 bool	CLayerDropOut::Setup(size_t inputSize, float rate)
 {
-	assert(rate < 1.0f);
+	assert(rate < 1.0f && rate > 0.0f);
+	if (rate >= 1.0f || rate <= 0.0f)
+		return false;
+
 	size_t	invRate = 1.0f / rate;
 
 	m_Rate = rate;
 	m_InputSize = inputSize;
 	m_Output.AllocateStorage(m_InputSize);
 	m_SlopesOut.AllocateStorage(m_InputSize);
-	m_DisabledIdx.resize(m_InputSize / invRate + 1);
-
-	const float	seed = (float)rand() / (float)RAND_MAX;
-	bool		neuronDisabled = false;
-
-	for (size_t i = 0; i < m_InputSize; ++i)
-	{
-		float	fastRand = sinf((float)i + seed) * 58492.47388f;
-		fastRand = fastRand - floorf(fastRand);
-
-		if ((i + 1) % invRate == 0)
-		{
-			if (!neuronDisabled)
-				m_DisabledIdx[i / invRate] = i;
-			neuronDisabled = false;
-		}
-		else if (fastRand < m_Rate && !neuronDisabled)
-		{
-			m_DisabledIdx[i / invRate] = i;
-			neuronDisabled = true;
-		}
-	}
-
-	memset(m_DisabledIdx.data(), 0, m_DisabledIdx.size() * sizeof(size_t));
+	size_t	disabledIdxSize = m_InputSize / invRate;
+	if (m_InputSize % invRate != 0)
+		disabledIdxSize += 1;
+	m_DisabledIdx.resize(disabledIdxSize);
+	UpdateDisabledArray();
 	return true;
 }
 
 void	CLayerDropOut::FeedForward(const float *input, size_t rangeMin, size_t rangeMax)
 {
+	MICROPROFILE_SCOPEI("CLayerDropOut", "CLayerDropOut::FeedForward", MP_GREEN1);
 	size_t		invRate = 1.0f / m_Rate;
 	const float		outScale = 1.0f / (1.0f - m_Rate);
 	for (size_t i = rangeMin; i < rangeMax; ++i)
@@ -62,6 +48,7 @@ void	CLayerDropOut::FeedForward(const float *input, size_t rangeMin, size_t rang
 
 void	CLayerDropOut::BackPropagateError(const float *prevOutput, const std::vector<float> &error, size_t rangeMin, size_t rangeMax)
 {
+	MICROPROFILE_SCOPEI("CLayerDropOut", "CLayerDropOut::BackPropagateError", MP_RED1);
 	size_t			invRate = 1.0f / m_Rate;
 	const float		*errorPtr = error.data();
 	float			*slopePtr = m_SlopesOut.Data();
@@ -77,6 +64,7 @@ void	CLayerDropOut::BackPropagateError(const float *prevOutput, const std::vecto
 
 void	CLayerDropOut::BackPropagateError(const float *prevOutput, const CLayer* nextLayer, size_t rangeMin, size_t rangeMax)
 {
+	MICROPROFILE_SCOPEI("CLayerDropOut", "CLayerDropOut::BackPropagateError", MP_RED1);
 	size_t			invRate = 1.0f / m_Rate;
 	float			*slopePtr = m_SlopesOut.Data();
 
@@ -89,31 +77,13 @@ void	CLayerDropOut::BackPropagateError(const float *prevOutput, const CLayer* ne
 
 void	CLayerDropOut::UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, size_t rangeMax)
 {
-	size_t		invRate = 1.0f / m_Rate;
-	const float	seed = (float)rand() / (float)RAND_MAX;
-	bool		neuronDisabled = false;
-
-	for (size_t i = rangeMin; i < rangeMax; ++i)
-	{
-		float	fastRand = sinf((float)i + seed) * 58492.47388f;
-		fastRand = fastRand - floorf(fastRand);
-
-		if ((i + 1) % invRate == 0)
-		{
-			if (!neuronDisabled)
-				m_DisabledIdx[i / invRate] = i;
-			neuronDisabled = false;
-		}
-		else if (fastRand < m_Rate && !neuronDisabled)
-		{
-			m_DisabledIdx[i / invRate] = i;
-			neuronDisabled = true;
-		}
-	}
+	MICROPROFILE_SCOPEI("CLayerDropOut", "CLayerDropOut::UpdateDisabledArray", MP_BLUE1);
+	UpdateDisabledArray();
 }
 
 void	CLayerDropOut::GatherSlopes(float *dst, const CLayer *prevLayer, size_t rangeMin, size_t rangeMax) const
 {
+	MICROPROFILE_SCOPEI("CLayerDropOut", "CLayerDropOut::GatherSlopes", MP_PALEVIOLETRED1);
 	size_t			invRate = 1.0f / m_Rate;
 	for (size_t i = rangeMin; i < rangeMax; ++i)
 	{
@@ -139,4 +109,29 @@ size_t	CLayerDropOut::GetThreadingHint() const
 size_t	CLayerDropOut::GetDomainSize() const
 {
 	return GetOutputSize();
+}
+
+void	CLayerDropOut::UpdateDisabledArray()
+{
+	size_t		invRate = 1.0f / m_Rate;
+	const float	seed = (float)rand() / (float)RAND_MAX;
+	bool		neuronDisabled = false;
+
+	for (size_t i = 0; i < m_InputSize; ++i)
+	{
+		float	fastRand = sinf((float)i + seed) * 58492.47388f;
+		fastRand = fastRand - floorf(fastRand);
+
+		if ((i + 1) % invRate == 0)
+		{
+			if (!neuronDisabled)
+				m_DisabledIdx[i / invRate] = floor(RemapValue(fastRand, 0.0f, 1.0f, (i + 1) - invRate, i + 1));
+			neuronDisabled = false;
+		}
+		else if (fastRand < m_Rate && !neuronDisabled)
+		{
+			m_DisabledIdx[i / invRate] = i;
+			neuronDisabled = true;
+		}
+	}
 }
