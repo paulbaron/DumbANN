@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <cstring>
+#include <vector>
 
 struct	SNeuronMatrixView
 {
@@ -58,6 +59,10 @@ public:
 	float	*Data() const { return m_Data; }
 	size_t	Size() const { return m_Size; }
 
+	void	Serialize(std::vector<uint8_t> &data) const;
+	bool	UnSerialize(const std::vector<uint8_t> &data, size_t &curIdx);
+	void	DebugCheckForNaNs() const;
+
 private:
 	float	*m_Data;
 	size_t	m_Size;
@@ -74,6 +79,10 @@ public:
 	float						*Data() const { return m_Mat.m_Data; }
 	size_t						StorageByteSize() const { return m_Mat.m_RowByteStride * m_Mat.m_Rows; }
 	const SNeuronMatrixView		&View() const { return m_Mat; }
+
+	void	Serialize(std::vector<uint8_t> &data) const;
+	bool	UnSerialize(const std::vector<uint8_t> &data, size_t &curIdx);
+	void	DebugCheckForNaNs() const;
 
 	static void		ComputeNetInput(float *dst, const float *src, const SConstNeuronMatrixView &mul, const float *add);
 	static void		ComputeError(float *dstProd, const float *src, const SConstNeuronMatrixView &mul);

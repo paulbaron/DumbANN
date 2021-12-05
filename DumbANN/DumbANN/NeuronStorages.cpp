@@ -71,6 +71,41 @@ bool	CNeuronVector::AllocateStorage(size_t elements)
 	return m_Data != nullptr;
 }
 
+void	CNeuronVector::Serialize(std::vector<uint8_t> &data) const
+{
+	size_t		prevSize = data.size();
+	data.resize(prevSize + sizeof(uint32_t) + m_Size * sizeof(float));
+	uint32_t	*dataPtr = (uint32_t*)(data.data() + prevSize);
+	*dataPtr = m_Size;
+	++dataPtr;
+	memcpy(dataPtr, m_Data, m_Size * sizeof(float));
+}
+
+bool	CNeuronVector::UnSerialize(const std::vector<uint8_t> &data, size_t &curIdx)
+{
+	if (curIdx + sizeof(uint32_t) > data.size())
+		return false;
+	uint32_t	*dataPtr = (uint32_t*)(data.data() + curIdx);
+	if (!AllocateStorage(dataPtr[0]))
+		return false;
+	curIdx += sizeof(uint32_t);
+	if (curIdx + m_Size * sizeof(float) > data.size())
+		return false;
+	memcpy(m_Data, dataPtr, m_Size * sizeof(float));
+	curIdx += m_Size * sizeof(float);
+	DebugCheckForNaNs();
+	return true;
+}
+
+void	CNeuronVector::DebugCheckForNaNs() const
+{
+	for (size_t i = 0; i < m_Size; ++i)
+	{
+		assert(!isnan(m_Data[i]));
+		assert(!isinf(m_Data[i]));
+	}
+}
+
 CNeuronMatrix::CNeuronMatrix()
 :	m_Mat(nullptr, 0, 0, 0)
 {
@@ -227,6 +262,47 @@ void	_ComputeNetInput(float *dst, const float *src, const SConstNeuronMatrixView
 		addPtr += 1;
 	}
 #endif
+}
+
+void	CNeuronMatrix::Serialize(std::vector<uint8_t> &data) const
+{
+	size_t		prevSize = data.size();
+	data.resize(prevSize + 3 * sizeof(uint32_t) + StorageByteSize());
+	uint32_t	*dataPtr = (uint32_t*)(data.data() + prevSize);
+	dataPtr[0] = m_Mat.m_RowByteStride;
+	dataPtr[1] = m_Mat.m_Rows;
+	dataPtr[2] = m_Mat.m_Columns;
+	dataPtr += 3;
+	memcpy(dataPtr, m_Mat.m_Data, StorageByteSize());
+}
+
+bool	CNeuronMatrix::UnSerialize(const std::vector<uint8_t> &data, size_t &curIdx)
+{
+	if (curIdx + 3 * sizeof(uint32_t) > data.size())
+		return false;
+	uint32_t	*dataPtr = (uint32_t*)(data.data() + curIdx);
+	AllocMatrix(dataPtr[1], dataPtr[2]);
+	assert(dataPtr[0] == m_Mat.m_RowByteStride);
+	dataPtr += 3;
+	curIdx += 3 * sizeof(uint32_t);
+	if (curIdx + StorageByteSize() > data.size())
+		return false;
+	memcpy(m_Mat.m_Data, dataPtr, StorageByteSize());
+	curIdx += StorageByteSize();
+	return true;
+}
+
+void	CNeuronMatrix::DebugCheckForNaNs() const
+{
+	for (size_t y = 0; y < m_Mat.m_Rows; ++y)
+	{
+		const float		*ptr = m_Mat.GetRow(y);
+		for (size_t x = 0; x < m_Mat.m_Columns; ++x)
+		{
+			assert(!isnan(ptr[x]));
+			assert(!isinf(ptr[x]));
+		}
+	}
 }
 
 void	CNeuronMatrix::ComputeNetInput(float *dst, const float *src, const SConstNeuronMatrixView &mul, const float *add)

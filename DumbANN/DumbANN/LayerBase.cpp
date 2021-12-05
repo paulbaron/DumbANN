@@ -3,6 +3,12 @@
 #include <xmmintrin.h>
 #include <assert.h>
 
+#include "LayerConv2D.h"
+#include "LayerDense.h"
+#include "LayerDropout.h"
+#include "LayerMaxPooling.h"
+#include "LayerSoftmax.h"
+
 float	RemapValue(float value, float oldMin, float oldMax, float newMin, float newMax)
 {
 	const float		normalizedVaue = (value - oldMin) / (oldMax - oldMin);
@@ -12,6 +18,9 @@ float	RemapValue(float value, float oldMin, float oldMax, float newMin, float ne
 const char	*kActivationNames[]
 {
 	"Relu",
+	"LeakyRelu",
+	"Elu",
+	"Gelu",
 	"Sigmoid",
 	"Tanh",
 	"Linear"
@@ -39,15 +48,42 @@ const char	*kInitializerNames[]
 	"Rand He"
 };
 
+CLayer	*CLayer::CreateLayer(ELayerType type)
+{
+	switch (type)
+	{
+	case ELayerType::LayerDense:
+		return new CLayerDense();
+		break;
+	case ELayerType::LayerConv2D:
+		return new CLayerConv2D();
+		break;
+	case ELayerType::LayerMaxPooling:
+		return new CLayerMaxPooling2D();
+		break;
+	case ELayerType::LayerDropout:
+		return new CLayerDropOut();
+		break;
+	case ELayerType::LayerSofmax:
+		return new CLayerSoftMax();
+		break;
+	default:
+		return nullptr;
+		break;
+	}
+}
+
 CLayer::CLayer()
 :	m_InputSize(0)
+,	m_OutputSize(0)
 ,	m_Activation(EActivation::Sigmoid)
-,	m_Optimization(EOptimization::SGD)
+,	m_Optimization(EOptimization::Adagrad)
 ,	m_Initializer(ERandInitializer::RandXavier)
 ,	m_Regularizer(ERegularizer::None)
 ,	m_RegularizerRatio(1e-5)
 ,	m_LearningRate(0.001f)
 ,	m_Inertia(0.0f)
+,	m_Learn(true)
 {
 }
 
@@ -100,6 +136,81 @@ void	CLayer::PrintBasicInfo() const
 	printf("\t\tWeight Initializer: %s\n", kInitializerNames[(int)m_Initializer]);
 }
 
+void	CLayer::SerializeLayerType(std::vector<uint8_t> &data, ELayerType type) const
+{
+	size_t		prevSize = data.size();
+	data.resize(prevSize + sizeof(uint32_t));
+	*(uint32_t*)(data.data() + prevSize) = (uint32_t)type;
+}
+
+void	CLayer::SerializeInOutSize(std::vector<uint8_t> &data) const
+{
+	size_t		prevSize = data.size();
+	data.resize(prevSize + 2 * sizeof(uint32_t));
+	uint32_t	*dataPtr = (uint32_t*)(data.data() + prevSize);
+	dataPtr[0] = m_InputSize;
+	dataPtr[1] = m_OutputSize;
+}
+
+bool	CLayer::UnSerializeInOutSize(const std::vector<uint8_t> &data, size_t &curIdx)
+{
+	if (curIdx + 2 * sizeof(uint32_t) > data.size())
+		return false;
+	uint32_t	*dataPtr = (uint32_t*)(data.data() + curIdx);
+	m_InputSize = dataPtr[0];
+	m_OutputSize = dataPtr[1];
+	curIdx += 2 * sizeof(uint32_t);
+	return true;
+}
+
+void	CLayer::SerializeBasicInfo(std::vector<uint8_t> &data) const
+{
+	SSerializedLayerBasicInfo	info;
+	info.m_Activation = (uint32_t)m_Activation;
+	info.m_Optimization = (uint32_t)m_Optimization;
+	info.m_Initializer = (uint32_t)m_Initializer;
+	info.m_Regularizer = (uint32_t)m_Regularizer;
+	info.m_RegularizerRatio = m_RegularizerRatio;
+	info.m_LearningRate = m_LearningRate;
+	info.m_Inertia = m_Inertia;
+	size_t	prevSize = data.size();
+	data.resize(prevSize + sizeof(info));
+	*(SSerializedLayerBasicInfo*)(data.data() + prevSize) = info;
+}
+
+bool	CLayer::UnSerializeBasicInfo(const std::vector<uint8_t> &data, size_t &curIdx)
+{
+	if (curIdx + sizeof(SSerializedLayerBasicInfo) > data.size())
+		return false;
+	const SSerializedLayerBasicInfo	*info = (const SSerializedLayerBasicInfo*)(data.data() + curIdx);
+	m_Activation = (EActivation)info->m_Activation;
+	m_Optimization = (EOptimization)info->m_Optimization;
+	m_Initializer = (ERandInitializer)info->m_Initializer;
+	m_Regularizer = (ERegularizer)info->m_Regularizer;
+	m_RegularizerRatio = info->m_RegularizerRatio;
+	m_LearningRate = info->m_LearningRate;
+	m_Inertia = info->m_Inertia;
+	curIdx += sizeof(SSerializedLayerBasicInfo);
+	return true;
+}
+
+void	CLayer::SerializeWeightsAndBias(std::vector<uint8_t> &data) const
+{
+	m_Weights.Serialize(data);
+	m_Bias.Serialize(data);
+}
+
+bool	CLayer::UnSerializeWeightsAndBias(const std::vector<uint8_t> &data, size_t &curIdx)
+{
+	if (!m_Weights.UnSerialize(data, curIdx))
+		return false;
+	m_Weights.DebugCheckForNaNs();
+	if (!m_Bias.UnSerialize(data, curIdx))
+		return false;
+	m_Bias.DebugCheckForNaNs();
+	return true;
+}
+
 void	CLayer::InitializeRandomRange(float min, float max)
 {
 	// Initialize to random floats:
@@ -122,6 +233,14 @@ void	CLayer::Activation(float* dst, const float* src, size_t size) const
 	case EActivation::Relu:
 		for (int i = 0; i < size; ++i)
 			dst[i] = Relu(src[i]);
+		break;
+	case EActivation::LeakyRelu:
+		for (int i = 0; i < size; ++i)
+			dst[i] = LeakyRelu(src[i]);
+		break;
+	case EActivation::Gelu:
+		for (int i = 0; i < size; ++i)
+			dst[i] = Gelu(src[i]);
 		break;
 	case EActivation::Sigmoid:
 		for (int i = 0; i < size; ++i)
@@ -146,6 +265,14 @@ void	CLayer::ActivationDerivative(float* dst, const float* src, size_t size) con
 	case EActivation::Relu:
 		for (int i = 0; i < size; ++i)
 			dst[i] *= ReluDerivative(src[i]);
+		break;
+	case EActivation::LeakyRelu:
+		for (int i = 0; i < size; ++i)
+			dst[i] *= LeakyReluDerivative(src[i]);
+		break;
+	case EActivation::Gelu:
+		for (int i = 0; i < size; ++i)
+			dst[i] *= GeluDerivative(src[i]);
 		break;
 	case EActivation::Sigmoid:
 		for (int i = 0; i < size; ++i)
@@ -182,16 +309,54 @@ float	CLayer::ReluDerivative(float x) const
 	return x >= 0 ? 1 : 0;
 }
 
+float	CLayer::LeakyRelu(float x) const
+{
+	return x > 0 ? x : 0.001f * x;
+}
+
+float	CLayer::LeakyReluDerivative(float x) const
+{
+	return x >= 0 ? 1 : 0.001f;
+}
+
+float	CLayer::Elu(float x) const
+{
+	return x >= 0 ? 1 : (expf(x) - 1);
+}
+
+float	CLayer::EluDerivative(float x) const
+{
+	return x >= 0 ? 1 : expf(x);
+}
+
+float	CLayer::Gelu(float x) const
+{
+	const float	a = 0.0356774f * (x * x * x) + 0.797885f * x;
+	return 0.5f * x * (tanhf(a) + 1.0f);
+}
+
+float	CLayer::GeluDerivative(float x) const
+{
+	const float	cubeX = x * x * x;
+	const float	a = 0.0356774f * cubeX + 0.797885f * x;
+	const float coshA = coshf(a);
+	const float cosh2A = coshf(2 * a);
+	const float coshASquare = coshA * coshA;
+	const float b = (cosh2A + 1) * (cosh2A + 1);
+
+	return	(0.214064f * cubeX * coshASquare) / b +
+			(1.59577f * x * coshASquare) / b +
+			(0.5f * sinhf(2 * a)) / (cosh2A + 1) + 0.5f;
+}
+
 float	CLayer::Tanh(float x) const
 {
-	float	ex = exp(x);
-	float	enx = exp(-x);
-	return (ex - enx) / (ex + enx);
+	return tanhf(x);
 }
 
 float	CLayer::TanhDerivative(float x) const
 {
-	float	thx = Tanh(x);
+	float	thx = tanhf(x);
 	return 1.0f - (thx * thx);
 }
 

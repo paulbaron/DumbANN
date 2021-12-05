@@ -13,6 +13,7 @@ CLayerDense::~CLayerDense()
 bool	CLayerDense::Setup(size_t inputSize, size_t outputSize)
 {
 	m_InputSize = inputSize;
+	m_OutputSize = outputSize;
 	m_Weights.AllocMatrix(outputSize, inputSize);
 	m_SlopesWeightAccum.AllocMatrix(outputSize, inputSize);
 	m_SlopesOutAccum.AllocateStorage(outputSize);
@@ -82,14 +83,17 @@ void	CLayerDense::BackPropagateError(const float *prevOutput, const std::vector<
 		slopePtr[outIdx] = -errorPtr[outIdx];
 	// Activation derivative:
 	ActivationDerivative(slopePtr + rangeMin, netInputPtr + rangeMin, outputRange);
-	// We compute the delta for the weights and bias (for the bias its just the output slope):
-	float		*slopeAccumPtr = m_SlopesOutAccum.Data();
-	for (size_t outIdx = rangeMin; outIdx < rangeMax; ++outIdx)
+	if (m_Learn)
 	{
-		float		*slopeWeightAccumPtr = m_SlopesWeightAccum.View().GetRow(outIdx);
-		slopeAccumPtr[outIdx] += slopePtr[outIdx];
-		for (size_t inIdx = 0; inIdx < m_InputSize; ++inIdx)
-			slopeWeightAccumPtr[inIdx] += slopePtr[outIdx] * prevOutput[inIdx];
+		// We compute the delta for the weights and bias (for the bias its just the output slope):
+		float		*slopeAccumPtr = m_SlopesOutAccum.Data();
+		for (size_t outIdx = rangeMin; outIdx < rangeMax; ++outIdx)
+		{
+			float		*slopeWeightAccumPtr = m_SlopesWeightAccum.View().GetRow(outIdx);
+			slopeAccumPtr[outIdx] += slopePtr[outIdx];
+			for (size_t inIdx = 0; inIdx < m_InputSize; ++inIdx)
+				slopeWeightAccumPtr[inIdx] += slopePtr[outIdx] * prevOutput[inIdx];
+		}
 	}
 }
 
@@ -104,14 +108,17 @@ void	CLayerDense::BackPropagateError(const float *prevOutput, const CLayer *next
 
 	// Inner layer of the neural network:
 	ActivationDerivative(slopePtr + rangeMin, netInputPtr + rangeMin, outputRange);
-	// We compute the delta for the weights and bias (for the bias its just the output slope):
-	float	*slopeAccumPtr = m_SlopesOutAccum.Data();
-	for (size_t outIdx = rangeMin; outIdx < rangeMax; ++outIdx)
+	if (m_Learn)
 	{
-		float* slopeWeightAccumPtr = m_SlopesWeightAccum.View().GetRow(outIdx);
-		slopeAccumPtr[outIdx] += slopePtr[outIdx];
-		for (size_t inIdx = 0; inIdx < m_InputSize; ++inIdx)
-			slopeWeightAccumPtr[inIdx] += slopePtr[outIdx] * prevOutput[inIdx];
+		// We compute the delta for the weights and bias (for the bias its just the output slope):
+		float	*slopeAccumPtr = m_SlopesOutAccum.Data();
+		for (size_t outIdx = rangeMin; outIdx < rangeMax; ++outIdx)
+		{
+			float* slopeWeightAccumPtr = m_SlopesWeightAccum.View().GetRow(outIdx);
+			slopeAccumPtr[outIdx] += slopePtr[outIdx];
+			for (size_t inIdx = 0; inIdx < m_InputSize; ++inIdx)
+				slopeWeightAccumPtr[inIdx] += slopePtr[outIdx] * prevOutput[inIdx];
+		}
 	}
 }
 
@@ -146,6 +153,27 @@ void	CLayerDense::PrintInfo() const
 	printf("\t\tInput: %zu\n", m_InputSize);
 	printf("\t\tOutput: %zu\n", m_Output.Size());
 	PrintBasicInfo();
+}
+
+void	CLayerDense::Serialize(std::vector<uint8_t> &data) const
+{
+	SerializeLayerType(data, ELayerType::LayerDense);
+	SerializeInOutSize(data);
+	SerializeBasicInfo(data);
+	SerializeWeightsAndBias(data);
+}
+
+bool	CLayerDense::UnSerialize(const std::vector<uint8_t> &data, size_t &curIdx)
+{
+	if (!UnSerializeInOutSize(data, curIdx))
+		return false;
+	if (!UnSerializeBasicInfo(data, curIdx))
+		return false;
+	if (!Setup(m_InputSize, m_OutputSize))
+		return false;
+	if (!UnSerializeWeightsAndBias(data, curIdx))
+		return false;
+	return true;
 }
 
 size_t	CLayerDense::GetThreadingHint() const

@@ -44,6 +44,7 @@ bool	CLayerConv2D::Setup(size_t inputFeatureCount, size_t inputSizeX, size_t inp
 	const size_t	weightsSizeY = featureCount;
 
 	m_InputSize = inputFeatureCount * inputSizeX * inputSizeY;
+	m_OutputSize = outputSize;
 
 	m_Weights.AllocMatrix(weightsSizeY, weightsSizeX);
 	m_SlopesWeightAccum.AllocMatrix(weightsSizeY, weightsSizeX);
@@ -114,17 +115,20 @@ void	CLayerConv2D::BackPropagateError(const float *prevOutput, const std::vector
 		m_SlopesOut.Data()[i] = -error[i];
 	ActivationDerivative(m_SlopesOut.Data() + featureStride * rangeMin, netInputPtr + featureStride * rangeMin, outputRange);
 
-	SAccumWeightsAndBiasDerivative_KernelIn	kernelIn;
-
-	kernelIn.m_InFeatureCount = m_InputImageCount;
-	kernelIn.m_OutFeatureCount = m_KernelCount;
-	kernelIn.m_Input = prevOutput;
-	kernelIn.m_AccumBias = m_SlopesOutAccum.Data();
-	kernelIn.m_AccumWeights = m_SlopesWeightAccum.View();
-	kernelIn.m_Slopes = m_SlopesOut.Data();
-
-	KernelConvolute<SAccumWeightsAndBiasDerivative_KernelIn,
-					&CLayerConv2D::Kernel_AccumWeightsAndBiasDerivative>(kernelIn, rangeMin, rangeMax, m_ConvParams);
+	if (m_Learn)
+	{
+		SAccumWeightsAndBiasDerivative_KernelIn	kernelIn;
+	
+		kernelIn.m_InFeatureCount = m_InputImageCount;
+		kernelIn.m_OutFeatureCount = m_KernelCount;
+		kernelIn.m_Input = prevOutput;
+		kernelIn.m_AccumBias = m_SlopesOutAccum.Data();
+		kernelIn.m_AccumWeights = m_SlopesWeightAccum.View();
+		kernelIn.m_Slopes = m_SlopesOut.Data();
+	
+		KernelConvolute<SAccumWeightsAndBiasDerivative_KernelIn,
+						&CLayerConv2D::Kernel_AccumWeightsAndBiasDerivative>(kernelIn, rangeMin, rangeMax, m_ConvParams);
+	}
 }
 
 void	CLayerConv2D::BackPropagateError(const float *prevOutput, const CLayer* nextLayer, size_t rangeMin, size_t rangeMax)
@@ -137,17 +141,20 @@ void	CLayerConv2D::BackPropagateError(const float *prevOutput, const CLayer* nex
 	// Inner layer of the neural network:
 	ActivationDerivative(m_SlopesOut.Data() + featureStride * rangeMin, netInputPtr + featureStride * rangeMin, outputRange);
 
-	SAccumWeightsAndBiasDerivative_KernelIn	kernelIn;
-
-	kernelIn.m_InFeatureCount = m_InputImageCount;
-	kernelIn.m_OutFeatureCount = m_KernelCount;
-	kernelIn.m_Input = prevOutput;
-	kernelIn.m_AccumBias = m_SlopesOutAccum.Data();
-	kernelIn.m_AccumWeights = m_SlopesWeightAccum.View();
-	kernelIn.m_Slopes = m_SlopesOut.Data();
-
-	KernelConvolute<SAccumWeightsAndBiasDerivative_KernelIn,
-					&CLayerConv2D::Kernel_AccumWeightsAndBiasDerivative>(kernelIn, rangeMin, rangeMax, m_ConvParams);
+	if (m_Learn)
+	{
+		SAccumWeightsAndBiasDerivative_KernelIn	kernelIn;
+	
+		kernelIn.m_InFeatureCount = m_InputImageCount;
+		kernelIn.m_OutFeatureCount = m_KernelCount;
+		kernelIn.m_Input = prevOutput;
+		kernelIn.m_AccumBias = m_SlopesOutAccum.Data();
+		kernelIn.m_AccumWeights = m_SlopesWeightAccum.View();
+		kernelIn.m_Slopes = m_SlopesOut.Data();
+	
+		KernelConvolute<SAccumWeightsAndBiasDerivative_KernelIn,
+						&CLayerConv2D::Kernel_AccumWeightsAndBiasDerivative>(kernelIn, rangeMin, rangeMax, m_ConvParams);
+	}
 }
 
 void	CLayerConv2D::UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, size_t rangeMax)
@@ -204,6 +211,40 @@ void	CLayerConv2D::PrintInfo() const
 	PrintBasicInfo();
 }
 
+void	CLayerConv2D::Serialize(std::vector<uint8_t> &data) const
+{
+	SerializeLayerType(data, ELayerType::LayerConv2D);
+	SerializeInOutSize(data);
+	m_ConvParams.Serialize(data);
+	size_t		prevSize = data.size();
+	data.resize(prevSize + 2 * sizeof(uint32_t));
+	uint32_t	*dataPtr = (uint32_t*)(data.data() + prevSize);
+	dataPtr[0] = m_KernelCount;
+	dataPtr[1] = m_InputImageCount;
+	SerializeWeightsAndBias(data);
+}
+
+bool	CLayerConv2D::UnSerialize(const std::vector<uint8_t> &data, size_t &curIdx)
+{
+	if (!UnSerializeInOutSize(data, curIdx))
+		return false;
+	if (!m_ConvParams.UnSerialize(data, curIdx))
+		return false;
+	if (curIdx + 2 * sizeof(uint32_t) > data.size())
+		return false;
+	uint32_t	*dataPtr = (uint32_t*)(data.data() + curIdx);
+	m_KernelCount = dataPtr[0];
+	m_InputImageCount = dataPtr[1];
+	curIdx += 2 * sizeof(uint32_t);
+	if (!Setup(	m_InputImageCount, m_ConvParams.m_InputSizeX, m_ConvParams.m_InputSizeY,
+				m_KernelCount, m_ConvParams.m_KernelSizeX, m_ConvParams.m_KernelSizeY,
+				m_ConvParams.m_InputPadding, m_ConvParams.m_KernelStride))
+		return false;
+	if (!UnSerializeWeightsAndBias(data, curIdx))
+		return false;
+	return true;
+}
+
 size_t	CLayerConv2D::GetThreadingHint() const
 {
 	return GetOutputSizeX() * GetOutputSizeY() * m_KernelCount * 4096;
@@ -231,8 +272,12 @@ void	CLayerConv2D::Kernel_AccumWeightsAndBiasDerivative(	const SAccumWeightsAndB
 	const float		slope = input.m_Slopes[outIdx];
 
 	assert(abs(slope) < 1000000.0f);
+	assert(!isnan(slope));
+	assert(!isinf(slope));
 	input.m_AccumBias[outIdx] += slope;
 	assert(abs(input.m_AccumBias[outIdx]) < 1000000.0f);
+	assert(!isnan(input.m_AccumBias[outIdx]));
+	assert(!isinf(input.m_AccumBias[outIdx]));
 	// For each input feature:
 	for (size_t inFeatureIdx = 0; inFeatureIdx < input.m_InFeatureCount; ++inFeatureIdx)
 	{
@@ -248,6 +293,8 @@ void	CLayerConv2D::Kernel_AccumWeightsAndBiasDerivative(	const SAccumWeightsAndB
 									(inX - range.m_ConvOffsetX);
 				weightsAccumPtr[weightIdx] += input.m_Input[inputIdx] * slope;
 				assert(abs(weightsAccumPtr[weightIdx]) < 1000000.0f);
+				assert(!isnan(weightsAccumPtr[weightIdx]));
+				assert(!isinf(weightsAccumPtr[weightIdx]));
 			}
 		}
 	}
@@ -278,6 +325,8 @@ void	CLayerConv2D::Kernel_ComputeNetInput(	const SComputeNetInput_KernelIn &inpu
 									(inX - range.m_ConvOffsetX);
 				accum += input.m_Input[inputIdx] * weightsPtr[weightIdx];
 				assert(abs(accum) < 1000000.0f);
+				assert(!isnan(accum));
+				assert(!isinf(accum));
 			}
 		}
 	}
@@ -287,6 +336,8 @@ void	CLayerConv2D::Kernel_ComputeNetInput(	const SComputeNetInput_KernelIn &inpu
 	accum += input.m_Bias[outIdx];
 	input.m_NetInput[outIdx] = accum;
 	assert(abs(input.m_NetInput[outIdx]) < 1000000.0f);
+	assert(!isnan(input.m_NetInput[outIdx]));
+	assert(!isinf(input.m_NetInput[outIdx]));
 }
 
 void	CLayerConv2D::Kernel_GatherSlopes(	const SGatherSlopes_KernelIn &input,
@@ -318,7 +369,9 @@ void	CLayerConv2D::Kernel_GatherSlopes(	const SGatherSlopes_KernelIn &input,
 									(inY - range.m_ConvOffsetY) * conv.m_KernelSizeX +
 									(inX - range.m_ConvOffsetX);
 				input.m_Output[dstIdx] += slope * weightsPtr[weightIdx];
-				assert(abs(input.m_Output[dstIdx]) < 1000000000.0f);
+				assert(abs(input.m_Output[dstIdx]) < 100000000.0f);
+				assert(!isnan(input.m_Output[dstIdx]));
+				assert(!isinf(input.m_Output[dstIdx]));
 			}
 		}
 	}

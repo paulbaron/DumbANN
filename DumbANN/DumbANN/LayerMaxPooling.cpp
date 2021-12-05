@@ -33,11 +33,13 @@ bool	CLayerMaxPooling2D::Setup(	size_t inputFeatureCount, size_t inputSizeX, siz
 	m_ConvParams.m_InputSizeX = inputSizeX;
 	m_ConvParams.m_InputSizeY = inputSizeY;
 	m_ConvParams.ComputeConvOutputSize();
-	m_Output.AllocateStorage(m_FeatureCount * m_ConvParams.m_OutputSizeX * m_ConvParams.m_OutputSizeY);
-	m_SlopesOut.AllocateStorage(m_FeatureCount * m_ConvParams.m_OutputSizeX * m_ConvParams.m_OutputSizeY);
 
+	m_OutputSize = m_FeatureCount * m_ConvParams.m_OutputSizeX * m_ConvParams.m_OutputSizeY;
 	m_InputSize = inputFeatureCount * inputSizeX * inputSizeY;
-	return true;
+	bool	success = true;
+	success &= m_Output.AllocateStorage(m_OutputSize);
+	success &= m_SlopesOut.AllocateStorage(m_OutputSize);
+	return success;
 }
 
 void	CLayerMaxPooling2D::FeedForward(const float *input, size_t rangeMin, size_t rangeMax)
@@ -106,6 +108,33 @@ void	CLayerMaxPooling2D::PrintInfo() const
 			m_FeatureCount, m_ConvParams.m_OutputSizeX, m_ConvParams.m_OutputSizeY);
 }
 
+void	CLayerMaxPooling2D::Serialize(std::vector<uint8_t> &data) const
+{
+	SerializeLayerType(data, ELayerType::LayerMaxPooling);
+	SerializeInOutSize(data);
+	m_ConvParams.Serialize(data);
+	size_t		prevSize = data.size();
+	data.resize(prevSize + sizeof(uint32_t));
+	uint32_t	*dataPtr = (uint32_t*)(data.data() + prevSize);
+	dataPtr[0] = m_FeatureCount;
+}
+
+bool	CLayerMaxPooling2D::UnSerialize(const std::vector<uint8_t> &data, size_t &curIdx)
+{
+	if (!UnSerializeInOutSize(data, curIdx))
+		return false;
+	if (!m_ConvParams.UnSerialize(data, curIdx))
+		return false;
+	uint32_t	*dataPtr = (uint32_t*)(data.data() + curIdx);
+	m_FeatureCount = dataPtr[0];
+	curIdx += sizeof(uint32_t);
+	if (!Setup(	m_FeatureCount, m_ConvParams.m_InputSizeX, m_ConvParams.m_InputSizeY,
+				m_ConvParams.m_KernelSizeX, m_ConvParams.m_KernelSizeY,
+				m_ConvParams.m_InputPadding, m_ConvParams.m_KernelStride))
+		return false;
+	return true;
+}
+
 size_t	CLayerMaxPooling2D::GetThreadingHint() const
 {
 	return m_FeatureCount * GetOutputSizeX() * GetOutputSizeY();
@@ -134,6 +163,8 @@ void	CLayerMaxPooling2D::Kernel_ComputeOutput(	const SComputeOutput_KernelIn &in
 								inX;
 			maxValue = std::max(maxValue, input.m_Input[inputIdx]);
 			assert(abs(maxValue) < 1000000.0f);
+			assert(!isnan(maxValue));
+			assert(!isinf(maxValue));
 		}
 	}
 	const size_t	outIdx =	range.m_FeatureIdx * featureOutputStride +
@@ -141,6 +172,8 @@ void	CLayerMaxPooling2D::Kernel_ComputeOutput(	const SComputeOutput_KernelIn &in
 								range.m_ConvIdxX;
 	input.m_Output[outIdx] = maxValue;
 	assert(abs(input.m_Output[outIdx]) < 1000000.0f);
+	assert(!isnan(input.m_Output[outIdx]));
+	assert(!isinf(input.m_Output[outIdx]));
 }
 
 void	CLayerMaxPooling2D::Kernel_GatherSlopes(const SGatherSlopes_KernelIn &input,
@@ -172,5 +205,7 @@ void	CLayerMaxPooling2D::Kernel_GatherSlopes(const SGatherSlopes_KernelIn &input
 								range.m_ConvIdxX;
 	input.m_Output[maxIdx] = input.m_Slopes[outIdx];
 	assert(abs(input.m_Output[maxIdx]) < 1000000.0f);
+	assert(!isnan(input.m_Output[outIdx]));
+	assert(!isinf(input.m_Output[outIdx]));
 }
 

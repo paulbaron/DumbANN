@@ -63,6 +63,9 @@
     <ClCompile Include="MicroProfile\microprofile.cpp">
       <Filter>Fichiers sources\Profile</Filter>
     </ClCompile>
+    <ClCompile Include="DumbANN\NeuronKernel.cpp">
+      <Filter>Fichiers sources\DumbANN</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DumbANN\NeuronStorages.h">

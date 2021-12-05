@@ -1,6 +1,6 @@
 #pragma once
 
-#define ENABLE_MICROPROFILE		1
+#define ENABLE_MICROPROFILE		0
 
 #if	ENABLE_MICROPROFILE
 #	include "microprofile.h"

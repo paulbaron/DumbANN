@@ -11,6 +11,9 @@
 #include <stdlib.h>
 #include <time.h>
 
+#define		MNIST_MODEL_PATH	"ModelMNIST.dann"
+#define		MNIST_MODEL_PATH2	"ModelMNIST2.dann"
+
 void	PrintData2D(const float *data, size_t sizeX, size_t sizeY, bool image)
 {
 	for (size_t y = 0; y < sizeY; ++y)
@@ -145,7 +148,12 @@ void	TrainNetwork(CNeuralNetwork &ann, const std::vector<float> &images, const s
 	const size_t		batchCount = labels.size() / miniBatchCount;
 	std::vector<float>	expectedOutput(10);
 	const size_t		printFrequency = 10;
+	float				inVariance = 0.0f;
+	float				outVariance = 0.0f;
+	std::vector<float>	prevOutput;
+	int					prevLabel = -1;
 
+	prevOutput.resize(10);
 	for (size_t epoch = 0; epoch < epochCount; ++epoch)
 	{
 		float	errorEpoch = 0.0f;
@@ -171,15 +179,36 @@ void	TrainNetwork(CNeuralNetwork &ann, const std::vector<float> &images, const s
 					currentError += abs(expectedOutput[j] - ann.GetOutput().Data()[j]);
 				errorEpoch += currentError;
 				errorBatch += currentError;
+
+				// Compute variance:
+				if (prevLabel != -1)
+				{
+					if (prevLabel != curLabel)
+						inVariance += 2.0f;
+					for (size_t j = 0; j < 10; ++j)
+						outVariance += abs(prevOutput[j] - ann.GetOutput().Data()[j]);
+					memcpy(prevOutput.data(), ann.GetOutput().Data(), 10 * sizeof(float));
+				}
+				prevLabel = curLabel;
+
 				// Backpropagation:
 				ann.BackPropagateError(inputPtr, expectedOutput.data());
 			}
 			ann.UpdateWeightAndBiases();
 			if ((batchIdx + 1) % printFrequency == 0)
 			{
-				printf("Error for batch %u/%u is:\t%f\n", (int)batchIdx + 1, (int)batchCount, errorBatch / (float)(printFrequency * miniBatchCount));
+				printf(	"Error for batch %u/%u is:\t%.4f\t\t[vIn: %.4f\tVout: %.4f]\n",
+						(int)batchIdx + 1,
+						(int)batchCount,
+						errorBatch / (float)(printFrequency),
+						inVariance / (float)(printFrequency),
+						outVariance / (float)(printFrequency));
 				errorBatch = 0.0f;
+				inVariance = 0.0f;
+				outVariance = 0.0f;
 			}
+			if ((batchIdx + 1) % 1000 == 0)
+				ann.Serialize(MNIST_MODEL_PATH2);
 		};
 		printf("Error for epoch %u/%u is:\t%f\n", (int)epoch + 1, (int)epochCount, errorEpoch / (float)(batchCount * miniBatchCount));
 		errorEpoch = 0.0f;
@@ -254,10 +283,11 @@ float	TestNetwork(CNeuralNetwork &ann, const std::vector<float> &images, const s
 
 void	TrainAutoEncoder(CNeuralNetwork &ann, const std::vector<float> &images, size_t labelCount)
 {
+	srand(time(nullptr));
 	const int			inputSize = images.size() / labelCount;
 	float				errorBatch = 0.0f;
 	const size_t		printFrequency = 10;
-	const size_t		batchCount = 20;
+	const size_t		batchCount = labelCount;
 	const float			*prevImagePtr = nullptr;
 	float				inVariance = 0.0f;
 	float				outVariance = 0.0f;
@@ -289,7 +319,7 @@ void	TrainAutoEncoder(CNeuralNetwork &ann, const std::vector<float> &images, siz
 		ann.UpdateWeightAndBiases();
 		if ((batchIdx + 1) % printFrequency == 0)
 		{
-			printf(	"Error for batch %u/%u is:\t%.4f\t[vIn: %.4f\tVout: %.4f]\n",
+			printf(	"Error for batch %u/%u is: %.4f\t[vIn: %.4f\tVout: %.4f]\n",
 					(int)batchIdx + 1,
 					(int)batchCount,
 					errorBatch / (float)(printFrequency),
@@ -299,8 +329,7 @@ void	TrainAutoEncoder(CNeuralNetwork &ann, const std::vector<float> &images, siz
 			inVariance = 0.0f;
 			outVariance = 0.0f;
 		}
-		if ((batchIdx + 1) % (printFrequency * 100) == 0 ||
-			batchIdx + 4 >= batchCount)
+		if ((batchIdx + 6) >= batchCount)
 		{
 			printf("\n");
 			PrintData2D(inputPtr, 28, 28, false);
@@ -308,6 +337,8 @@ void	TrainAutoEncoder(CNeuralNetwork &ann, const std::vector<float> &images, siz
 			PrintData2D(ann.GetOutput().Data(), 28, 28, false);
 			printf("\n");
 		}
+		if ((batchIdx + 1) % 1000 == 0)
+			ann.Serialize(MNIST_MODEL_PATH);
 	}
 }
 
@@ -332,7 +363,7 @@ float	TestMNIST()
 	CNeuralNetwork		autoEncoder;
 	CNeuralNetwork		ann;
 
-	CLayerDense			layers[3];
+	CLayerDense			layers[6];
 	CLayerMaxPooling2D	poolLayers[2];
 	CLayerConv2D		convLayers[3];
 	CLayerDropOut		dropout;
@@ -366,44 +397,84 @@ float	TestMNIST()
 						poolLayers[0].GetOutputSizeY(),
 						1, 1, 1,
 						0, 1);
-	convLayers[2].SetActivation(EActivation::Sigmoid);
-	convLayers[2].SetInitialization(ERandInitializer::RandXavier);
-	// Dense:
-	layers[0].Setup(convLayers[2].GetOutputSize(), 10);
-	layers[0].SetActivation(EActivation::Sigmoid);
-	layers[0].SetInitialization(ERandInitializer::RandXavier);
-	// Softmax:
-	softmax.Setup(10);
+	convLayers[2].SetActivation(EActivation::Linear);
+	convLayers[2].SetInitialization(ERandInitializer::RandHe);
+	// Dense, encode to 84 floats:
+	layers[2].Setup(convLayers[2].GetOutputSize(), convLayers[2].GetOutputSize() / 4);
+	layers[2].SetActivation(EActivation::LeakyRelu);
+	layers[2].SetInitialization(ERandInitializer::RandHe);
 
-	ann.AddLayer(&convLayers[0]);
-	ann.AddLayer(&convLayers[1]);
-	// ann.AddLayer(&dropout);
-	ann.AddLayer(&poolLayers[0]);
-	ann.AddLayer(&convLayers[2]);
-	ann.AddLayer(&layers[0]);
-	ann.AddLayer(&softmax);
+	// Classifier:
+	// Dense:
+	layers[0].Setup(layers[2].GetOutputSize(), 84);
+	layers[0].SetActivation(EActivation::Relu);
+	layers[0].SetInitialization(ERandInitializer::RandHe);
+	// Dense:
+	layers[5].Setup(layers[0].GetOutputSize(), 16);
+	layers[5].SetActivation(EActivation::Relu);
+	layers[5].SetInitialization(ERandInitializer::RandHe);
+	// Dense:
+	layers[1].Setup(layers[5].GetOutputSize(), 10);
+	layers[1].SetActivation(EActivation::Linear);
+	layers[1].SetInitialization(ERandInitializer::RandXavier);
+	// Softmax:
+	softmax.Setup(layers[1].GetOutputSize());
+
+//	ann.AddLayer(&convLayers[0]);
+//	ann.AddLayer(&convLayers[1]);
+//	ann.AddLayer(&dropout);
+//	ann.AddLayer(&poolLayers[0]);
+//	ann.AddLayer(&convLayers[2]);
+//	ann.AddLayer(&layers[2]);
 
 	// Auto-encoder:
-	layers[1].Setup(convLayers[2].GetOutputSize(), (28 * 28) / 2);
-	layers[1].SetActivation(EActivation::Sigmoid);
-	layers[1].SetInitialization(ERandInitializer::RandXavier);
+	layers[3].Setup(layers[2].GetOutputSize(), (28 * 28) / 2);
+	layers[3].SetActivation(EActivation::LeakyRelu);
+	layers[3].SetInitialization(ERandInitializer::RandHe);
 
-	layers[2].Setup(layers[1].GetOutputSize(), 28 * 28);
-	layers[2].SetActivation(EActivation::Sigmoid);
-	layers[2].SetInitialization(ERandInitializer::RandXavier);
+	layers[4].Setup(layers[3].GetOutputSize(), 28 * 28);
+	layers[4].SetActivation(EActivation::Elu);
+	layers[4].SetInitialization(ERandInitializer::RandHe);
 	
-	autoEncoder.AddLayer(&convLayers[0]);
-	autoEncoder.AddLayer(&convLayers[1]);
-	autoEncoder.AddLayer(&dropout);
-	autoEncoder.AddLayer(&poolLayers[0]);
-	autoEncoder.AddLayer(&convLayers[2]);
-	autoEncoder.AddLayer(&layers[1]);
-	autoEncoder.AddLayer(&layers[2]);
+	if (!autoEncoder.UnSerialize(MNIST_MODEL_PATH))
+	{
+		autoEncoder.AddLayer(&convLayers[0]);
+		autoEncoder.AddLayer(&convLayers[1]);
+		autoEncoder.AddLayer(&dropout);
+		autoEncoder.AddLayer(&poolLayers[0]);
+		autoEncoder.AddLayer(&convLayers[2]);
+		autoEncoder.AddLayer(&layers[2]);
+		autoEncoder.AddLayer(&layers[3]);
+		autoEncoder.AddLayer(&layers[4]);
+	}
+	autoEncoder.SetAllLearningRate(0.001f);
 
-	autoEncoder.PrintDetails();
-	TrainAutoEncoder(autoEncoder, images, labels.size());
-	autoEncoder.DestroyThreadsIFN();
-	return 0.0f;
+	if (!ann.UnSerialize(MNIST_MODEL_PATH2))
+	{
+		ann.AddLayer(autoEncoder.Layers()[0]);
+		ann.AddLayer(autoEncoder.Layers()[1]);
+		ann.AddLayer(autoEncoder.Layers()[2]);
+		ann.AddLayer(autoEncoder.Layers()[3]);
+		ann.AddLayer(autoEncoder.Layers()[4]);
+		ann.AddLayer(autoEncoder.Layers()[5]);
+		ann.AddLayer(&layers[0]);
+		ann.AddLayer(&layers[5]);
+		ann.AddLayer(&layers[1]);
+		ann.AddLayer(&softmax);
+	}
+	ann.SetAllLearningRate(0.0001f);
+
+//	autoEncoder.PrintDetails();
+//	TrainAutoEncoder(autoEncoder, images, labels.size());
+//
+//	autoEncoder.Serialize(MNIST_MODEL_PATH);
+
+	//convLayers[0].SetLearn(false);
+	//convLayers[1].SetLearn(false);
+	//dropout.SetLearn(false);
+	//poolLayers[0].SetLearn(false);
+	//convLayers[2].SetLearn(false);
+	//layers[2].SetLearn(false);
 
 	ann.PrintDetails();
 	TrainNetwork(ann, images, labels);
@@ -413,8 +484,10 @@ float	TestMNIST()
 
 	LoadDataSet(images, labels, "t10k-images.idx3-ubyte", "t10k-labels.idx1-ubyte");
 
-	float	error = TestNetwork(ann, images, labels);
+	float	error = 0.0f; // TestNetwork(ann, images, labels);
 	printf("--------------------------------\n");
+	ann.DestroyThreadsIFN();
+	autoEncoder.DestroyThreadsIFN();
 	return error;
 }
 

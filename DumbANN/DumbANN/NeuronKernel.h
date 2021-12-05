@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <cstring>
 #include <assert.h>
+#include <vector>
 
 struct	SConvolutionParams
 {
@@ -23,24 +24,14 @@ public:
 	,	m_InputPadding(0)
 	,	m_InputSizeX(0)
 	,	m_InputSizeY(0)
+	,	m_OutputSizeX(0)
+	,	m_OutputSizeY(0)
 	{
 	}
 
-	void	ComputeConvOutputSize()
-	{
-		const size_t	convCountX = (m_InputSizeX + 1 + 2 * m_InputPadding) - m_KernelSizeX;
-		const size_t	convCountY = (m_InputSizeY + 1 + 2 * m_InputPadding) - m_KernelSizeY;
-
-		if (convCountX % m_KernelStride != 0)
-			m_OutputSizeX = convCountX / m_KernelStride + 1;
-		else
-			m_OutputSizeX = convCountX / m_KernelStride;
-
-		if (convCountY % m_KernelStride != 0)
-			m_OutputSizeY = convCountY / m_KernelStride + 1;
-		else
-			m_OutputSizeY = convCountY / m_KernelStride;
-	}
+	void	ComputeConvOutputSize();
+	void	Serialize(std::vector<uint8_t> &data) const;
+	bool	UnSerialize(const std::vector<uint8_t> &data, size_t &curIdx);
 };
 
 struct	SKernelRange

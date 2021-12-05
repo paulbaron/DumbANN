@@ -105,11 +105,14 @@ bool	CNeuralNetwork::UpdateWeightAndBiases()
 	{
 		CLayer	*layer = m_Layers[i];
 
-		std::function<void(size_t, size_t)>	updateWeightAndBias = [this, layer](size_t minRange, size_t maxRange)
+		if (layer->Learn())
 		{
-			layer->UpdateWeightsAndBias(m_CurrentTrainingStep, minRange, maxRange);
-		};
-		m_TaskManager.MultithreadRange(updateWeightAndBias, layer->GetDomainSize(), layer->GetThreadingHint(), false);
+			std::function<void(size_t, size_t)>	updateWeightAndBias = [this, layer](size_t minRange, size_t maxRange)
+			{
+				layer->UpdateWeightsAndBias(m_CurrentTrainingStep, minRange, maxRange);
+			};
+			m_TaskManager.MultithreadRange(updateWeightAndBias, layer->GetDomainSize(), layer->GetThreadingHint(), false);
+		}
 	}
 	m_TaskManager.CallOnceJobFinished(std::function<void()>([this](){ ResetTrainingSteps(); }));
 	return true;
@@ -126,3 +129,88 @@ void	CNeuralNetwork::PrintDetails() const
 	}
 	printf("-------------------------------\n");
 }
+
+bool	CNeuralNetwork::Serialize(const char* path)
+{
+	m_TaskManager.WaitForCompletion(true);
+	FILE	*annFile = nullptr;
+	if (fopen_s(&annFile, path, "w+b") != 0)
+	{
+		fprintf(stderr, "Could not open ann file\n");
+		return false;
+	}
+	SNetworkHeader	header;
+	header.m_Magic = SNetworkHeader::MagicNumber;
+	header.m_LayerCount = m_Layers.size();
+	fwrite(&header, sizeof(SNetworkHeader), 1, annFile);
+	std::vector<uint8_t>	writeBuff;
+	for (const CLayer *layer : m_Layers)
+	{
+		layer->Serialize(writeBuff);
+	}
+	printf("Writing file '%s'\n", path);
+	fwrite(writeBuff.data(), sizeof(uint8_t), writeBuff.size(), annFile);
+	fclose(annFile);
+	return true;
+}
+
+bool	CNeuralNetwork::UnSerialize(const char* path)
+{
+	FILE	*annFile = nullptr;
+	if (fopen_s(&annFile, path, "rb") != 0)
+	{
+		fprintf(stderr, "Could not open ann file\n");
+		return false;
+	}
+	SNetworkHeader	header;
+	fread(&header, sizeof(SNetworkHeader), 1, annFile);
+
+	if (header.m_Magic != SNetworkHeader::MagicNumber)
+	{
+		fprintf(stderr, "Wrong magic number\n");
+		fclose(annFile);
+		return false;
+	}
+
+	std::vector<uint8_t>	readBuff;
+
+	long	cursorPos = ftell(annFile);
+	fseek(annFile, 0, SEEK_END);
+	long	cursorEnd = ftell(annFile);
+	fseek(annFile, cursorPos, SEEK_SET);
+	readBuff.resize(cursorEnd - cursorPos);
+	fread(readBuff.data(), sizeof(uint8_t), readBuff.size(), annFile);
+
+	size_t		curIdx = 0;
+
+	while (curIdx < readBuff.size())
+	{
+		uint32_t	*dataPtr = (uint32_t*)(readBuff.data() + curIdx);
+		curIdx += sizeof(uint32_t);
+		CLayer		*layer =  CLayer::CreateLayer((ELayerType)*dataPtr);
+		if (layer == nullptr)
+		{
+			fclose(annFile);
+			return false;
+		}
+		if (!layer->UnSerialize(readBuff, curIdx))
+		{
+			fprintf(stderr, "Failed unserializing layer\n");
+			fclose(annFile);
+			return false;
+		}
+		if (!AddLayer(layer))
+		{
+			fclose(annFile);
+			return false;
+		}
+	}
+	fclose(annFile);
+}
+
+void	CNeuralNetwork::SetAllLearningRate(float learningRate)
+{
+	for (CLayer *layer : m_Layers)
+		layer->SetLearningRate(learningRate);
+}
+

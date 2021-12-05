@@ -22,6 +22,7 @@ bool	CLayerDropOut::Setup(size_t inputSize, float rate)
 
 	m_Rate = rate;
 	m_InputSize = inputSize;
+	m_OutputSize = inputSize;
 	m_Output.AllocateStorage(m_InputSize);
 	m_SlopesOut.AllocateStorage(m_InputSize);
 	size_t	disabledIdxSize = m_InputSize / invRate;
@@ -35,7 +36,7 @@ bool	CLayerDropOut::Setup(size_t inputSize, float rate)
 void	CLayerDropOut::FeedForward(const float *input, size_t rangeMin, size_t rangeMax)
 {
 	MICROPROFILE_SCOPEI("CLayerDropOut", "CLayerDropOut::FeedForward", MP_GREEN1);
-	size_t		invRate = 1.0f / m_Rate;
+	size_t			invRate = 1.0f / m_Rate;
 	const float		outScale = 1.0f / (1.0f - m_Rate);
 	for (size_t i = rangeMin; i < rangeMax; ++i)
 	{
@@ -99,6 +100,30 @@ void	CLayerDropOut::PrintInfo() const
 	printf("\tLayer DropOut:\n");
 	printf("\t\tInput: %zu\n", m_InputSize);
 	printf(	"\t\tRate: %f\n", m_Rate);
+}
+
+void	CLayerDropOut::Serialize(std::vector<uint8_t>& data) const
+{
+	SerializeLayerType(data, ELayerType::LayerDropout);
+	SerializeInOutSize(data);
+	size_t		prevSize = data.size();
+	data.resize(prevSize + sizeof(float));
+	float		*dataPtr = (float*)(data.data() + prevSize);
+	dataPtr[0] = m_Rate;
+}
+
+bool	CLayerDropOut::UnSerialize(const std::vector<uint8_t> &data, size_t &curIdx)
+{
+	if (!UnSerializeInOutSize(data, curIdx))
+		return false;
+	if (curIdx + sizeof(float) > data.size())
+		return false;
+	float		*dataPtr = (float*)(data.data() + curIdx);
+	m_Rate = dataPtr[0];
+	curIdx += sizeof(float);
+	if (!Setup(m_InputSize, m_Rate))
+		return false;
+	return true;
 }
 
 size_t	CLayerDropOut::GetThreadingHint() const

@@ -152,6 +152,7 @@
     <ClCompile Include="DumbANN\LayerMaxPooling.cpp" />
     <ClCompile Include="DumbANN\LayerSoftmax.cpp" />
     <ClCompile Include="DumbANN\NeuralNetwork.cpp" />
+    <ClCompile Include="DumbANN\NeuronKernel.cpp" />
     <ClCompile Include="DumbANN\NeuronStorages.cpp" />
     <ClCompile Include="DumbANN\TaskManager.cpp" />
     <ClCompile Include="Main.cpp" />

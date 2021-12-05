@@ -9,6 +9,9 @@ float	RemapValue(float value, float oldMin, float oldMax, float newMin, float ne
 enum class	EActivation
 {
 	Relu,
+	LeakyRelu,
+	Elu,
+	Gelu,
 	Sigmoid,
 	Tanh,
 	Linear
@@ -40,9 +43,20 @@ const char	*kOptimizationNames[];
 const char	*kRegularizationNames[];
 const char	*kInitializerNames[];
 
+enum class	ELayerType
+{
+	LayerDense,
+	LayerConv2D,
+	LayerMaxPooling,
+	LayerDropout,
+	LayerSofmax
+};
+
 class	CLayer
 {
 public:
+	static CLayer	*CreateLayer(ELayerType type);
+
 	CLayer();
 	~CLayer();
 
@@ -59,6 +73,8 @@ public:
 	virtual void	UpdateWeightsAndBias(size_t trainingSteps, size_t rangeMin, size_t rangeMax) = 0;
 	virtual void	GatherSlopes(float *dst, const CLayer *prevLayer, size_t rangeMin, size_t rangeMax) const = 0;
 	virtual void	PrintInfo() const = 0;
+	virtual void	Serialize(std::vector<uint8_t> &data) const = 0;
+	virtual bool	UnSerialize(const std::vector<uint8_t> &data, size_t &curIdx) = 0;
 
 	virtual size_t	GetThreadingHint() const = 0;
 	virtual size_t	GetDomainSize() const = 0;
@@ -68,10 +84,20 @@ public:
 	void			SetOptimizaton(EOptimization optimizer) { m_Optimization = optimizer; }
 	void			SetRegularization(ERegularizer regularizer) { m_Regularizer = regularizer; }
 	void			SetLearningRate(float learningRate) { m_LearningRate = learningRate; }
+	void			SetLearn(bool learn) { m_Learn = learn; }
+	bool			Learn() const { return m_Learn; }
 
 	void			Initializer();
 
 protected:
+	void			SerializeLayerType(std::vector<uint8_t> &data, ELayerType type) const;
+	void			SerializeInOutSize(std::vector<uint8_t> &data) const;
+	bool			UnSerializeInOutSize(const std::vector<uint8_t> &data, size_t &curIdx);
+	void			SerializeBasicInfo(std::vector<uint8_t> &data) const;
+	bool			UnSerializeBasicInfo(const std::vector<uint8_t> &data, size_t &curIdx);
+	void			SerializeWeightsAndBias(std::vector<uint8_t> &data) const;
+	bool			UnSerializeWeightsAndBias(const std::vector<uint8_t> &data, size_t &curIdx);
+
 	void			PrintBasicInfo() const;
 	void			InitializeRandomRange(float min, float max);
 
@@ -83,6 +109,12 @@ protected:
 	float		SigmoidDerivative(float x) const;
 	float		Relu(float x) const;
 	float		ReluDerivative(float x) const;
+	float		LeakyRelu(float x) const;
+	float		LeakyReluDerivative(float x) const;
+	float		Elu(float x) const;
+	float		EluDerivative(float x) const;
+	float		Gelu(float x) const;
+	float		GeluDerivative(float x) const;
 	float		Tanh(float x) const;
 	float		TanhDerivative(float x) const;
 
@@ -100,6 +132,7 @@ protected:
 	CNeuronVector		m_Bias;
 
 	size_t				m_InputSize;
+	size_t				m_OutputSize;
 	CNeuronVector		m_NetInput;
 	CNeuronVector		m_Output;
 	CNeuronVector		m_SlopesOut;
@@ -119,5 +152,18 @@ protected:
 
 	CNeuronMatrix		m_DeltaWeightVelocity;
 	CNeuronVector		m_DeltaBiasVelocity;
+
+	bool				m_Learn;
+
+	struct	SSerializedLayerBasicInfo
+	{
+		uint32_t	m_Activation;
+		uint32_t	m_Optimization;
+		uint32_t	m_Initializer;
+		uint32_t	m_Regularizer;
+		float		m_RegularizerRatio;
+		float		m_LearningRate;
+		float		m_Inertia;
+	};
 };
 
